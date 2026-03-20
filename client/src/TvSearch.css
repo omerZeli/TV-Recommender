@@ -1,6 +1,6 @@
 .app {
   width: min(1120px, 100% - 2rem);
-  margin: 0 auto;
+  margin: 2rem auto 0;
   padding: 0 0 3rem;
 }
 
@@ -8,16 +8,14 @@
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   padding: 1rem 2rem;
-  margin-bottom: 2rem;
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+  width: 100%;
 }
 
 .header-content {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  max-width: 1120px;
-  margin: 0 auto;
   width: 100%;
 }
 

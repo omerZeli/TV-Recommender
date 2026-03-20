@@ -52,7 +52,6 @@ export function Register() {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Your name"
               required
               disabled={isLoading}
               minLength={2}
@@ -67,7 +66,6 @@ export function Register() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
               required
               disabled={isLoading}
             />
@@ -80,7 +78,6 @@ export function Register() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
               required
               disabled={isLoading}
               minLength={8}
@@ -95,7 +92,6 @@ export function Register() {
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="••••••••"
               required
               disabled={isLoading}
               minLength={8}

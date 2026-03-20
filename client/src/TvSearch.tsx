@@ -82,7 +82,7 @@ export function TvSearch() {
   }
 
   return (
-    <main className="app">
+    <>
       <header className="header">
         <div className="header-content">
           <h1>TV Recommender</h1>
@@ -99,7 +99,8 @@ export function TvSearch() {
         </div>
       </header>
 
-      <header className="hero">
+      <main className="app">
+        <header className="hero">
         <h2>Find Your Next Favorite Show</h2>
         <p>Search TMDB and discover amazing TV series</p>
       </header>
@@ -147,6 +148,7 @@ export function TvSearch() {
           </article>
         ))}
       </section>
-    </main>
+      </main>
+    </>
   )
 }
