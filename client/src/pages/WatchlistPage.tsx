@@ -19,6 +19,7 @@ export function WatchlistPage() {
   const [error, setError] = useState<string | null>(null)
   const [isRemovingShowId, setIsRemovingShowId] = useState<number | null>(null)
   const [isMarkingWatchedShowId, setIsMarkingWatchedShowId] = useState<number | null>(null)
+  const [filterStatus, setFilterStatus] = useState<'all' | 'watched' | 'unwatched'>('all')
 
   useEffect(() => {
     if (!token) return
@@ -66,6 +67,19 @@ export function WatchlistPage() {
       controller.abort()
     }
   }, [token])
+
+  const getFilteredItems = () => {
+    switch (filterStatus) {
+      case 'watched':
+        return items.filter((item) => item.watched)
+      case 'unwatched':
+        return items.filter((item) => !item.watched)
+      default:
+        return items
+    }
+  }
+
+  const filteredItems = getFilteredItems()
 
   const handleCardClick = (show: TmdbTvResult) => {
     navigate(`/show/${show.id}`, { state: { show } })
@@ -177,16 +191,33 @@ export function WatchlistPage() {
         {error && <p className="error">{error}</p>}
 
         {!error && !isLoading && (
-          <p className="results-meta">
-            {items.length === 0
-              ? 'Your watchlist is empty. Add shows from Search or Show Details.'
-              : `${items.length} show${items.length === 1 ? '' : 's'} saved`}
-          </p>
+          <>
+            <div className="watchlist-filter-tabs">
+              <button
+                className={`filter-tab ${filterStatus === 'all' ? 'filter-tab--active' : ''}`}
+                onClick={() => setFilterStatus('all')}
+              >
+                All {items.length > 0 && `(${items.length})`}
+              </button>
+              <button
+                className={`filter-tab ${filterStatus === 'watched' ? 'filter-tab--active' : ''}`}
+                onClick={() => setFilterStatus('watched')}
+              >
+                Watched {items.filter((i) => i.watched).length > 0 && `(${items.filter((i) => i.watched).length})`}
+              </button>
+              <button
+                className={`filter-tab ${filterStatus === 'unwatched' ? 'filter-tab--active' : ''}`}
+                onClick={() => setFilterStatus('unwatched')}
+              >
+                Unwatched {items.filter((i) => !i.watched).length > 0 && `(${items.filter((i) => !i.watched).length})`}
+              </button>
+            </div>
+          </>
         )}
 
         <section className="results-grid" aria-live="polite">
           {!isLoading &&
-            items.map((show) => (
+            filteredItems.map((show) => (
               <article
                 className="card"
                 key={show.id}
@@ -213,7 +244,7 @@ export function WatchlistPage() {
                   <h2>{show.name}</h2>
                   <p className="meta">
                     {show.first_air_date || 'Unknown date'} • ⭐{' '}
-                    {show.vote_average.toFixed(1)} ({show.vote_count})
+                    {show.vote_average.toFixed(1)}
                   </p>
                   <p className="overview">{show.overview || 'No overview available.'}</p>
                   <div className="card-actions">

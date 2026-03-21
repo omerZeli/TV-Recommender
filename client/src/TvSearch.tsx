@@ -421,7 +421,7 @@ export function TvSearch() {
               <h2>{show.name}</h2>
               <p className="meta">
                 {show.first_air_date || 'Unknown date'} • ⭐{' '}
-                {show.vote_average.toFixed(1)} ({show.vote_count})
+                {show.vote_average.toFixed(1)}
               </p>
               <p className="overview">{show.overview || 'No overview available.'}</p>
               <div className="card-actions">
