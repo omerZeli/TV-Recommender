@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
 import { useAuth } from '../context/AuthContext'
-import type { TmdbTvResult } from '../types/tv'
+import type { TmdbTvDetails, TmdbTvResult } from '../types/tv'
 import './ShowDetailsPage.css'
 
 type TmdbVideo = {
@@ -59,6 +59,8 @@ export function ShowDetailsPage() {
   const [watchlistError, setWatchlistError] = useState<string | null>(null)
 
   const show = (location.state as { show?: TmdbTvResult } | null)?.show
+  const [details, setDetails] = useState<TmdbTvDetails | null>(null)
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false)
 
   useEffect(() => {
     // Always open details at the top of the page.
@@ -70,6 +72,40 @@ export function ShowDetailsPage() {
       navigate('/', { replace: true })
     }
   }, [navigate, show])
+
+  useEffect(() => {
+    if (!show || !token) return
+
+    const controller = new AbortController()
+
+    const fetchDetails = async () => {
+      setIsLoadingDetails(true)
+      try {
+        const response = await fetch(`${API_BASE_URL}/tv/${show.id}`, {
+          method: 'GET',
+          headers: {
+            accept: 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          signal: controller.signal,
+        })
+        if (response.ok) {
+          const data = (await response.json()) as TmdbTvDetails
+          setDetails(data)
+        }
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return
+      } finally {
+        setIsLoadingDetails(false)
+      }
+    }
+
+    fetchDetails().catch(() => {})
+
+    return () => {
+      controller.abort()
+    }
+  }, [show, token])
 
   useEffect(() => {
     if (!show || !token) return
@@ -164,18 +200,19 @@ export function ShowDetailsPage() {
     setIsSavingToWatchlist(true)
     setWatchlistError(null)
 
+    const src = details ?? show
     const payload: AddWatchlistPayload = {
-      id: show.id,
-      name: show.name,
-      overview: show.overview ?? '',
-      poster_path: show.poster_path,
-      backdrop_path: show.backdrop_path,
-      first_air_date: show.first_air_date ?? '',
-      vote_average: show.vote_average ?? 0,
-      vote_count: show.vote_count ?? 0,
-      original_name: show.original_name ?? show.name,
-      original_language: show.original_language ?? '',
-      origin_country: Array.isArray(show.origin_country) ? show.origin_country : [],
+      id: src.id,
+      name: src.name,
+      overview: src.overview ?? '',
+      poster_path: src.poster_path,
+      backdrop_path: src.backdrop_path,
+      first_air_date: src.first_air_date ?? '',
+      vote_average: src.vote_average ?? 0,
+      vote_count: src.vote_count ?? 0,
+      original_name: src.original_name ?? src.name,
+      original_language: src.original_language ?? '',
+      origin_country: Array.isArray(src.origin_country) ? src.origin_country : [],
     }
 
     try {
@@ -235,18 +272,19 @@ export function ShowDetailsPage() {
     setIsTogglingWatched(true)
     setWatchlistError(null)
 
+    const src = details ?? show
     const payload: AddWatchlistPayload = {
-      id: show.id,
-      name: show.name,
-      overview: show.overview ?? '',
-      poster_path: show.poster_path,
-      backdrop_path: show.backdrop_path,
-      first_air_date: show.first_air_date ?? '',
-      vote_average: show.vote_average ?? 0,
-      vote_count: show.vote_count ?? 0,
-      original_name: show.original_name ?? show.name,
-      original_language: show.original_language ?? '',
-      origin_country: Array.isArray(show.origin_country) ? show.origin_country : [],
+      id: src.id,
+      name: src.name,
+      overview: src.overview ?? '',
+      poster_path: src.poster_path,
+      backdrop_path: src.backdrop_path,
+      first_air_date: src.first_air_date ?? '',
+      vote_average: src.vote_average ?? 0,
+      vote_count: src.vote_count ?? 0,
+      original_name: src.original_name ?? src.name,
+      original_language: src.original_language ?? '',
+      origin_country: Array.isArray(src.origin_country) ? src.origin_country : [],
     }
 
     const nextWatchedState = !isWatched
@@ -302,6 +340,8 @@ export function ShowDetailsPage() {
 
   if (!show) return null
 
+  const display = details ?? show
+
   return (
     <div className="sdp-root">
       <header className="sdp-header">
@@ -326,16 +366,19 @@ export function ShowDetailsPage() {
         </div>
       </header>
 
-      {show.backdrop_path && (
+      {display.backdrop_path && (
         <div
           className="sdp-backdrop"
-          style={{ backgroundImage: `url(${TMDB_BACKDROP_BASE}${show.backdrop_path})` }}
+          style={{ backgroundImage: `url(${TMDB_BACKDROP_BASE}${display.backdrop_path})` }}
         >
           <div className="sdp-backdrop-overlay">
             <div className="sdp-backdrop-title">
-              <h1>{show.name}</h1>
-              {show.original_name !== show.name && (
-                <p className="sdp-backdrop-original">{show.original_name}</p>
+              <h1>{display.name}</h1>
+              {display.original_name !== display.name && (
+                <p className="sdp-backdrop-original">{display.original_name}</p>
+              )}
+              {details?.tagline && (
+                <p className="sdp-backdrop-tagline">&ldquo;{details.tagline}&rdquo;</p>
               )}
             </div>
           </div>
@@ -343,21 +386,24 @@ export function ShowDetailsPage() {
       )}
 
       <main className="sdp-main">
-        {!show.backdrop_path && (
+        {!display.backdrop_path && (
           <div className="sdp-title-fallback">
-            <h1>{show.name}</h1>
-            {show.original_name !== show.name && (
-              <p className="sdp-title-original">{show.original_name}</p>
+            <h1>{display.name}</h1>
+            {display.original_name !== display.name && (
+              <p className="sdp-title-original">{display.original_name}</p>
+            )}
+            {details?.tagline && (
+              <p className="sdp-tagline">&ldquo;{details.tagline}&rdquo;</p>
             )}
           </div>
         )}
 
         <div className="sdp-content">
           <aside className="sdp-poster">
-            {show.poster_path ? (
+            {display.poster_path ? (
               <img
-                src={`${TMDB_POSTER_BASE}${show.poster_path}`}
-                alt={`${show.name} poster`}
+                src={`${TMDB_POSTER_BASE}${display.poster_path}`}
+                alt={`${display.name} poster`}
               />
             ) : (
               <div className="sdp-no-poster">No poster available</div>
@@ -365,68 +411,123 @@ export function ShowDetailsPage() {
           </aside>
 
           <section className="sdp-details">
+            {isLoadingDetails && !details && (
+              <p className="sdp-details-loading">Loading details...</p>
+            )}
+
             <div className="sdp-actions">
               <div className="sdp-actions-row">
-                <button
-                  className={`sdp-watchlist-btn ${isInWatchlist ? 'sdp-watchlist-btn--remove' : ''}`}
-                  onClick={isInWatchlist ? handleRemoveFromWatchlist : handleAddToWatchlist}
-                  disabled={isSavingToWatchlist || isRemovingFromWatchlist || isTogglingWatched}
-                >
-                  {isInWatchlist
-                    ? isRemovingFromWatchlist
-                      ? 'Removing...'
-                      : 'Remove from Watchlist'
-                    : isSavingToWatchlist
-                      ? 'Adding...'
-                      : 'Add to Watchlist'}
-                </button>
-                <button
-                  className={`sdp-watch-eye-btn ${isWatched ? 'sdp-watch-eye-btn--done' : ''}`}
-                  type="button"
-                  aria-label={isWatched ? 'Mark as unwatched' : 'Mark as watched'}
-                  title={isWatched ? 'Mark as unwatched' : 'Mark as watched'}
-                  onClick={handleToggleWatched}
-                  disabled={isSavingToWatchlist || isRemovingFromWatchlist || isTogglingWatched}
-                >
-                  {isTogglingWatched
-                    ? '...'
-                    : isWatched
-                      ? <VisibilityIcon fontSize="small" />
-                      : <VisibilityOutlinedIcon fontSize="small" />}
-                </button>
+                {details?.genres && details.genres.length > 0 && (
+                  <div className="sdp-genres">
+                    {details.genres.map((g) => (
+                      <span key={g.id} className="sdp-genre-tag">{g.name}</span>
+                    ))}
+                  </div>
+                )}
+                <div className="sdp-actions-btns">
+                  <button
+                    className={`sdp-watchlist-btn ${isInWatchlist ? 'sdp-watchlist-btn--remove' : ''}`}
+                    onClick={isInWatchlist ? handleRemoveFromWatchlist : handleAddToWatchlist}
+                    disabled={isSavingToWatchlist || isRemovingFromWatchlist || isTogglingWatched}
+                  >
+                    {isInWatchlist
+                      ? isRemovingFromWatchlist
+                        ? 'Removing...'
+                        : 'Remove from Watchlist'
+                      : isSavingToWatchlist
+                        ? 'Adding...'
+                        : 'Add to Watchlist'}
+                  </button>
+                  <button
+                    className={`sdp-watch-eye-btn ${isWatched ? 'sdp-watch-eye-btn--done' : ''}`}
+                    type="button"
+                    aria-label={isWatched ? 'Mark as unwatched' : 'Mark as watched'}
+                    title={isWatched ? 'Mark as unwatched' : 'Mark as watched'}
+                    onClick={handleToggleWatched}
+                    disabled={isSavingToWatchlist || isRemovingFromWatchlist || isTogglingWatched}
+                  >
+                    {isTogglingWatched
+                      ? '...'
+                      : isWatched
+                        ? <VisibilityIcon fontSize="small" />
+                        : <VisibilityOutlinedIcon fontSize="small" />}
+                  </button>
+                </div>
               </div>
               {watchlistError && <p className="sdp-watchlist-error">{watchlistError}</p>}
             </div>
 
             <div className="sdp-meta-grid">
-              <div className="sdp-meta-item sdp-meta-item--wide">
+              <div className="sdp-meta-item sdp-meta-item--medium">
                 <span className="sdp-meta-label">First Air Date</span>
-                <span className="sdp-meta-value">{show.first_air_date || 'Unknown'}</span>
+                <span className="sdp-meta-value">{display.first_air_date || 'Unknown'}</span>
               </div>
 
-              <div className="sdp-meta-item sdp-meta-item--wide">
+              {details?.last_air_date && (
+                <div className="sdp-meta-item sdp-meta-item--medium">
+                  <span className="sdp-meta-label">Last Air Date</span>
+                  <span className="sdp-meta-value">{details.last_air_date}</span>
+                </div>
+              )}
+
+              <div className="sdp-meta-item sdp-meta-item--medium">
                 <span className="sdp-meta-label">Rating</span>
                 <span className="sdp-meta-value sdp-rating">
                   <span className="sdp-star">⭐</span>
-                  {show.vote_average.toFixed(1)}
-                  <span className="sdp-vote-count">/ 10 ({show.vote_count.toLocaleString()} votes)</span>
+                  {display.vote_average.toFixed(1)}
+                  <span className="sdp-vote-count">/ 10</span>
                 </span>
               </div>
 
+              {details?.networks && details.networks.length > 0 && (
+                <div className="sdp-meta-item sdp-meta-item--medium">
+                  <span className="sdp-meta-label">Network</span>
+                  <span className="sdp-meta-value">{details.networks.map((n) => n.name).join(', ')}</span>
+                </div>
+              )}
+
               <div className="sdp-meta-item sdp-meta-item--compact">
                 <span className="sdp-meta-label">Language</span>
-                <span className="sdp-meta-value">{show.original_language.toUpperCase()}</span>
+                <span className="sdp-meta-value">{display.original_language.toUpperCase()}</span>
               </div>
 
               <div className="sdp-meta-item sdp-meta-item--compact">
                 <span className="sdp-meta-label">Country</span>
-                <span className="sdp-meta-value">{show.origin_country.join(', ') || 'Unknown'}</span>
+                <span className="sdp-meta-value">{display.origin_country.join(', ') || 'Unknown'}</span>
               </div>
+
+              {details?.status && (
+                <div className="sdp-meta-item sdp-meta-item--compact">
+                  <span className="sdp-meta-label">Status</span>
+                  <span className="sdp-meta-value">{details.status}</span>
+                </div>
+              )}
+
+              {details?.type && (
+                <div className="sdp-meta-item sdp-meta-item--compact">
+                  <span className="sdp-meta-label">Type</span>
+                  <span className="sdp-meta-value">{details.type}</span>
+                </div>
+              )}
+
+              {details && (
+                <div className="sdp-meta-item sdp-meta-item--compact">
+                  <span className="sdp-meta-label">Seasons</span>
+                  <span className="sdp-meta-value">{details.number_of_seasons}</span>
+                </div>
+              )}
+
+              {details && (
+                <div className="sdp-meta-item sdp-meta-item--compact">
+                  <span className="sdp-meta-label">Episodes</span>
+                  <span className="sdp-meta-value">{details.number_of_episodes}</span>
+                </div>
+              )}
             </div>
 
             <div className="sdp-synopsis">
-              <h2>Synopsis</h2>
-              <p>{show.overview || 'No overview available.'}</p>
+              <h2>Overview</h2>
+              <p>{display.overview || 'No overview available.'}</p>
             </div>
 
             <section className="sdp-videos" aria-live="polite">

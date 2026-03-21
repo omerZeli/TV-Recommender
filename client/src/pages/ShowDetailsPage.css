@@ -125,6 +125,13 @@
   font-style: italic;
 }
 
+.sdp-backdrop-tagline {
+  margin: 0.5rem 0 0;
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.6);
+  font-style: italic;
+}
+
 /* ── Main Content ──────────────────────────────────────────────── */
 .sdp-main {
   max-width: 1200px;
@@ -203,7 +210,21 @@
 .sdp-actions-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: space-between;
+}
+
+.sdp-actions-row .sdp-genres {
+  margin-bottom: 0;
+  flex: 1;
+}
+
+.sdp-actions-btns {
+  display: flex;
+  align-items: center;
   gap: 0.45rem;
+  margin-left: auto;
 }
 
 .sdp-watchlist-btn {
@@ -292,6 +313,10 @@
   grid-column: span 4;
 }
 
+.sdp-meta-item--medium {
+  grid-column: span 3;
+}
+
 .sdp-meta-item--compact {
   grid-column: span 2;
 }
@@ -325,6 +350,46 @@
   font-size: 0.82rem;
   color: #7a7080;
   font-weight: 400;
+}
+
+/* ── Details loading ───────────────────────────────────────────── */
+.sdp-details-loading {
+  color: #7a7080;
+  font-size: 0.9rem;
+  margin: 0 0 0.5rem;
+}
+
+/* ── Tagline ───────────────────────────────────────────────────── */
+.sdp-tagline {
+  font-style: italic;
+  color: #7a7080;
+  font-size: 1rem;
+  margin: 0 0 1rem;
+}
+
+/* ── Genres ────────────────────────────────────────────────────── */
+.sdp-genres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.sdp-genre-tag {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  border-radius: 999px;
+  padding: 0.25rem 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+/* ── Meta simple row ───────────────────────────────────────────── */
+.sdp-meta-simple {
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+  margin-bottom: 0.6rem;
 }
 
 /* ── Synopsis ──────────────────────────────────────────────────── */

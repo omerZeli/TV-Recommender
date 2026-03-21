@@ -47,6 +47,31 @@ export class TvService {
     return response.json();
   }
 
+  async getDetails(id: number) {
+    const tmdbBearerToken = this.getTmdbBearerToken();
+
+    const searchParams = new URLSearchParams({
+      language: 'en-US',
+    });
+
+    const response = await fetch(
+      `https://api.themoviedb.org/3/tv/${id}?${searchParams.toString()}`,
+      {
+        method: 'GET',
+        headers: {
+          accept: 'application/json',
+          Authorization: `Bearer ${tmdbBearerToken}`,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new BadGatewayException('TMDB details fetch failed');
+    }
+
+    return response.json();
+  }
+
   async getVideos(id: number) {
     const tmdbBearerToken = this.getTmdbBearerToken();
 

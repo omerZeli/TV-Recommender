@@ -13,6 +13,11 @@ export class TvController {
     return this.tvService.search(dto.query);
   }
 
+  @Get(':id')
+  details(@Param('id', ParseIntPipe) id: number) {
+    return this.tvService.getDetails(id);
+  }
+
   @Get(':id/videos')
   videos(@Param('id', ParseIntPipe) id: number) {
     return this.tvService.getVideos(id);
