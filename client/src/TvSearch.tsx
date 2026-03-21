@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { FormEvent, MouseEvent } from 'react'
+import VisibilityIcon from '@mui/icons-material/Visibility'
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
 import './TvSearch.css'
 import { useAuth } from './context/AuthContext'
 import type { TmdbTvResult } from './types/tv'
@@ -26,6 +28,11 @@ type AddWatchlistPayload = {
   original_name: string
   original_language: string
   origin_country: string[]
+}
+
+type SetWatchedPayload = {
+  watched: boolean
+  show?: AddWatchlistPayload
 }
 
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w342'
@@ -85,8 +92,10 @@ export function TvSearch() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(initialState.error)
   const [watchlistIds, setWatchlistIds] = useState<number[]>([])
+  const [watchedShowIds, setWatchedShowIds] = useState<number[]>([])
   const [isAddingShowId, setIsAddingShowId] = useState<number | null>(null)
   const [isRemovingShowId, setIsRemovingShowId] = useState<number | null>(null)
+  const [isMarkingWatchedShowId, setIsMarkingWatchedShowId] = useState<number | null>(null)
   const { user, token, logout } = useAuth()
   const navigate = useNavigate()
 
@@ -112,6 +121,7 @@ export function TvSearch() {
 
         const data = (await response.json()) as TmdbTvResult[]
         setWatchlistIds(data.map((item) => item.id))
+        setWatchedShowIds(data.filter((item) => item.watched).map((item) => item.id))
       } catch (watchlistError) {
         if (watchlistError instanceof DOMException && watchlistError.name === 'AbortError') {
           return
@@ -121,6 +131,7 @@ export function TvSearch() {
 
     fetchWatchlist().catch(() => {
       setWatchlistIds([])
+      setWatchedShowIds([])
     })
 
     return () => {
@@ -264,10 +275,66 @@ export function TvSearch() {
       }
 
       setWatchlistIds((prevIds) => prevIds.filter((id) => id !== showId))
+      setWatchedShowIds((prevIds) => prevIds.filter((id) => id !== showId))
     } catch {
       setError('Could not remove this show from your watchlist. Please try again.')
     } finally {
       setIsRemovingShowId(null)
+    }
+  }
+
+  const handleMarkAsWatched = async (
+    event: MouseEvent<HTMLButtonElement>,
+    show: TmdbTvResult,
+  ) => {
+    event.stopPropagation()
+
+    if (!token || watchedShowIds.includes(show.id)) {
+      return
+    }
+
+    setIsMarkingWatchedShowId(show.id)
+
+    const payload: AddWatchlistPayload = {
+      id: show.id,
+      name: show.name,
+      overview: show.overview ?? '',
+      poster_path: show.poster_path,
+      backdrop_path: show.backdrop_path,
+      first_air_date: show.first_air_date ?? '',
+      vote_average: show.vote_average ?? 0,
+      vote_count: show.vote_count ?? 0,
+      original_name: show.original_name ?? show.name,
+      original_language: show.original_language ?? '',
+      origin_country: Array.isArray(show.origin_country) ? show.origin_country : [],
+    }
+
+    const watchPayload: SetWatchedPayload = {
+      watched: true,
+      show: payload,
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/watchlist/${show.id}/watched`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(watchPayload),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to mark show as watched')
+      }
+
+      setWatchlistIds((prevIds) => (prevIds.includes(show.id) ? prevIds : [...prevIds, show.id]))
+      setWatchedShowIds((prevIds) => (prevIds.includes(show.id) ? prevIds : [...prevIds, show.id]))
+    } catch {
+      setError('Could not mark this show as watched. Please try again.')
+    } finally {
+      setIsMarkingWatchedShowId(null)
     }
   }
 
@@ -352,24 +419,49 @@ export function TvSearch() {
                 {show.vote_average.toFixed(1)} ({show.vote_count})
               </p>
               <p className="overview">{show.overview || 'No overview available.'}</p>
-              <button
-                className={`watchlist-btn ${watchlistIds.includes(show.id) ? 'watchlist-btn--remove' : ''}`}
-                type="button"
-                onClick={(event) =>
-                  watchlistIds.includes(show.id)
-                    ? handleRemoveFromWatchlist(event, show.id)
-                    : handleAddToWatchlist(event, show)
-                }
-                disabled={isAddingShowId === show.id || isRemovingShowId === show.id}
-              >
-                {watchlistIds.includes(show.id)
-                  ? isRemovingShowId === show.id
-                    ? 'Removing...'
-                    : 'Remove from Watchlist'
-                  : isAddingShowId === show.id
-                    ? 'Adding...'
-                    : 'Add to Watchlist'}
-              </button>
+              <div className="card-actions">
+                <button
+                  className={`watchlist-btn ${watchlistIds.includes(show.id) ? 'watchlist-btn--remove' : ''}`}
+                  type="button"
+                  onClick={(event) =>
+                    watchlistIds.includes(show.id)
+                      ? handleRemoveFromWatchlist(event, show.id)
+                      : handleAddToWatchlist(event, show)
+                  }
+                  disabled={
+                    isAddingShowId === show.id ||
+                    isRemovingShowId === show.id ||
+                    isMarkingWatchedShowId === show.id
+                  }
+                >
+                  {watchlistIds.includes(show.id)
+                    ? isRemovingShowId === show.id
+                      ? 'Removing...'
+                      : 'Remove from Watchlist'
+                    : isAddingShowId === show.id
+                      ? 'Adding...'
+                      : 'Add to Watchlist'}
+                </button>
+                <button
+                  className={`watch-eye-btn ${watchedShowIds.includes(show.id) ? 'watch-eye-btn--done' : ''}`}
+                  type="button"
+                  aria-label={watchedShowIds.includes(show.id) ? 'Watched' : 'Mark as watched'}
+                  title={watchedShowIds.includes(show.id) ? 'Watched' : 'Mark as watched'}
+                  onClick={(event) => handleMarkAsWatched(event, show)}
+                  disabled={
+                    watchedShowIds.includes(show.id) ||
+                    isMarkingWatchedShowId === show.id ||
+                    isAddingShowId === show.id ||
+                    isRemovingShowId === show.id
+                  }
+                >
+                  {isMarkingWatchedShowId === show.id
+                    ? '...'
+                    : watchedShowIds.includes(show.id)
+                      ? <VisibilityIcon fontSize="small" />
+                      : <VisibilityOutlinedIcon fontSize="small" />}
+                </button>
+              </div>
             </div>
           </article>
         ))}

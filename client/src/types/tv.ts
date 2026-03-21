@@ -10,4 +10,5 @@ export type TmdbTvResult = {
   original_name: string
   original_language: string
   origin_country: string[]
+  watched?: boolean
 }

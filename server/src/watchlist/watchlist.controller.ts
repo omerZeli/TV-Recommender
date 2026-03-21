@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Patch,
   Param,
   ParseIntPipe,
   Post,
@@ -11,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AddWatchlistItemDto } from './dto/add-watchlist-item.dto';
+import { SetWatchStatusDto } from './dto/set-watch-status.dto';
 import { WatchlistService } from './watchlist.service';
 
 @Controller('watchlist')
@@ -34,6 +36,7 @@ export class WatchlistController {
       original_name: item.originalName,
       original_language: item.originalLanguage,
       origin_country: item.originCountry,
+      watched: item.watched,
     }));
   }
 
@@ -53,6 +56,31 @@ export class WatchlistController {
       original_name: item.originalName,
       original_language: item.originalLanguage,
       origin_country: item.originCountry,
+      watched: item.watched,
+    };
+  }
+
+  @Patch(':showId/watched')
+  async setWatched(
+    @Request() req,
+    @Param('showId', ParseIntPipe) showId: number,
+    @Body() dto: SetWatchStatusDto,
+  ) {
+    const item = await this.watchlistService.setWatchedForUser(
+      req.user.id,
+      showId,
+      dto.watched,
+      dto.show,
+    );
+
+    if (!item) {
+      return { updated: false };
+    }
+
+    return {
+      updated: true,
+      id: item.showId,
+      watched: item.watched,
     };
   }
 

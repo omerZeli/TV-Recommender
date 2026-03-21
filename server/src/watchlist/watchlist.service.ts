@@ -49,4 +49,26 @@ export class WatchlistService {
     const result = await this.watchlistRepo.delete({ userId, showId });
     return (result.affected ?? 0) > 0;
   }
+
+  async setWatchedForUser(
+    userId: number,
+    showId: number,
+    watched: boolean,
+    show?: AddWatchlistItemDto,
+  ): Promise<WatchlistItem | null> {
+    let item = await this.watchlistRepo.findOne({
+      where: { userId, showId },
+    });
+
+    if (!item) {
+      if (!watched || !show) {
+        return null;
+      }
+
+      item = await this.addForUser(userId, show);
+    }
+
+    item.watched = watched;
+    return this.watchlistRepo.save(item);
+  }
 }

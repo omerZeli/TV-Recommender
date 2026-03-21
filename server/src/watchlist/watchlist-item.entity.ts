@@ -52,6 +52,9 @@ export class WatchlistItem {
   @Column({ type: 'jsonb', default: () => "'[]'" })
   originCountry: string[];
 
+  @Column({ type: 'boolean', default: false })
+  watched: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 

@@ -212,16 +212,23 @@
   overflow: hidden;
 }
 
-.watchlist-btn {
+.card-actions {
   margin-top: auto;
   padding-top: 0.9rem;
-  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.watchlist-btn {
+  flex: 1;
   border: 0;
   border-radius: 0.6rem;
   background: #314dab;
   color: #fff;
   font-weight: 600;
-  padding: 0.65rem 0.75rem;
+  padding: 0.5rem 0.7rem;
+  line-height: 1.2;
   cursor: pointer;
   transition: background-color 0.2s ease;
 }
@@ -241,6 +248,35 @@
 
 .watchlist-btn--remove:not(:disabled):hover {
   background: #842525;
+}
+
+.watch-eye-btn {
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  border-radius: 0.6rem;
+  background: #314dab;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.watch-eye-btn:not(:disabled):hover {
+  background: #243c8a;
+}
+
+.watch-eye-btn:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+
+.watch-eye-btn--done {
+  background: #1d7f4d;
 }
 
 @media (max-width: 720px) {

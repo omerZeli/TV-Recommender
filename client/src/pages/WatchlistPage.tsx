@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { MouseEvent } from 'react'
+import VisibilityIcon from '@mui/icons-material/Visibility'
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
 import { useAuth } from '../context/AuthContext'
 import type { TmdbTvResult } from '../types/tv'
 import '../TvSearch.css'
@@ -16,6 +18,7 @@ export function WatchlistPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isRemovingShowId, setIsRemovingShowId] = useState<number | null>(null)
+  const [isMarkingWatchedShowId, setIsMarkingWatchedShowId] = useState<number | null>(null)
 
   useEffect(() => {
     if (!token) return
@@ -98,6 +101,47 @@ export function WatchlistPage() {
     }
   }
 
+  const handleMarkAsWatched = async (
+    event: MouseEvent<HTMLButtonElement>,
+    showId: number,
+  ) => {
+    event.stopPropagation()
+    if (!token) return
+
+    setIsMarkingWatchedShowId(showId)
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/watchlist/${showId}/watched`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ watched: true }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to mark show as watched')
+      }
+
+      setItems((prevItems) =>
+        prevItems.map((item) =>
+          item.id === showId
+            ? {
+                ...item,
+                watched: true,
+              }
+            : item,
+        ),
+      )
+    } catch {
+      setError('Could not mark this show as watched. Please try again.')
+    } finally {
+      setIsMarkingWatchedShowId(null)
+    }
+  }
+
   return (
     <>
       <header className="header">
@@ -171,14 +215,30 @@ export function WatchlistPage() {
                     {show.vote_average.toFixed(1)} ({show.vote_count})
                   </p>
                   <p className="overview">{show.overview || 'No overview available.'}</p>
-                  <button
-                    className="watchlist-btn watchlist-btn--remove"
-                    type="button"
-                    onClick={(event) => handleRemoveFromWatchlist(event, show.id)}
-                    disabled={isRemovingShowId === show.id}
-                  >
-                    {isRemovingShowId === show.id ? 'Removing...' : 'Remove from Watchlist'}
-                  </button>
+                  <div className="card-actions">
+                    <button
+                      className="watchlist-btn watchlist-btn--remove"
+                      type="button"
+                      onClick={(event) => handleRemoveFromWatchlist(event, show.id)}
+                      disabled={isRemovingShowId === show.id || isMarkingWatchedShowId === show.id}
+                    >
+                      {isRemovingShowId === show.id ? 'Removing...' : 'Remove from Watchlist'}
+                    </button>
+                    <button
+                      className={`watch-eye-btn ${show.watched ? 'watch-eye-btn--done' : ''}`}
+                      type="button"
+                      aria-label={show.watched ? 'Watched' : 'Mark as watched'}
+                      title={show.watched ? 'Watched' : 'Mark as watched'}
+                      onClick={(event) => handleMarkAsWatched(event, show.id)}
+                      disabled={show.watched || isRemovingShowId === show.id || isMarkingWatchedShowId === show.id}
+                    >
+                      {isMarkingWatchedShowId === show.id
+                        ? '...'
+                        : show.watched
+                          ? <VisibilityIcon fontSize="small" />
+                          : <VisibilityOutlinedIcon fontSize="small" />}
+                    </button>
+                  </div>
                 </div>
               </article>
             ))}
