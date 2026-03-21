@@ -1,7 +1,5 @@
 # --- Build stage ---
 FROM node:20-alpine AS builder
-ARG VITE_TMDB_BEARER_TOKEN
-ENV VITE_TMDB_BEARER_TOKEN=$VITE_TMDB_BEARER_TOKEN
 WORKDIR /app
 COPY package*.json ./
 RUN npm install

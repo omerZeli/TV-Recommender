@@ -40,8 +40,6 @@ services:
     build:
       context: ./client
       dockerfile: Dockerfile
-      args:
-        - VITE_TMDB_BEARER_TOKEN=${VITE_TMDB_BEARER_TOKEN}
     env_file: ./client/.env
     container_name: tv-recommender-client
     restart: unless-stopped

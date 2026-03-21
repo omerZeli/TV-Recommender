@@ -4,6 +4,8 @@ import './TvSearch.css'
 import { useAuth } from './context/AuthContext'
 import { ShowDetailsModal } from './components/ShowDetailsModal'
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api'
+
 type TmdbTvResult = {
   id: number
   name: string
@@ -35,7 +37,7 @@ export function TvSearch() {
   const [error, setError] = useState<string | null>(null)
   const [selectedShow, setSelectedShow] = useState<TmdbTvResult | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const { user, logout } = useAuth()
+  const { user, token, logout } = useAuth()
 
   const handleSearch = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -47,37 +49,30 @@ export function TvSearch() {
       return
     }
 
-    const bearerToken = import.meta.env.VITE_TMDB_BEARER_TOKEN
-    if (!bearerToken) {
-      setError('Missing VITE_TMDB_BEARER_TOKEN. Add it to your .env file.')
-      setResults([])
-      return
-    }
-
     setIsLoading(true)
     setError(null)
 
     try {
-      const url = `https://api.themoviedb.org/3/search/tv?query=${encodeURIComponent(trimmed)}&include_adult=true&language=en-US&page=1`
+      const url = `${API_BASE_URL}/tv/search?query=${encodeURIComponent(trimmed)}`
       const options = {
         method: 'GET',
         headers: {
           accept: 'application/json',
-          Authorization: `Bearer ${bearerToken}`,
+          Authorization: `Bearer ${token}`,
         },
       }
 
       const response = await fetch(url, options)
 
       if (!response.ok) {
-        throw new Error('TMDB search failed. Please try again.')
+        throw new Error('Search failed. Please try again.')
       }
 
       const data = (await response.json()) as TmdbSearchResponse
       setResults(data.results)
       setSearchTerm(trimmed)
     } catch {
-      setError('Could not fetch results from TMDB. Please try again.')
+      setError('Could not fetch results. Please try again.')
       setResults([])
     } finally {
       setIsLoading(false)

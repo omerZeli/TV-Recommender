@@ -3,7 +3,6 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import { Login } from './pages/Login'
 import { Register } from './pages/Register'
 import { TvSearch } from './TvSearch'
-import { ProtectedRoute } from './components/ProtectedRoute'
 
 function AppRoutes() {
   const { token } = useAuth()
