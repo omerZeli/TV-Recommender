@@ -47,3 +47,28 @@ export type TmdbTvDetails = {
   created_by: { id: number; name: string; profile_path: string | null }[]
   popularity: number
 }
+
+export type TvPreferences = {
+  airDateGte?: string
+  airDateLte?: string
+  episodeRuntimeGte?: number
+  episodeRuntimeLte?: number
+  originCountries: string[]
+  originalLanguages: string[]
+  companies: number[]
+  status: number[]
+  type: number[]
+  watchProviders: number[]
+}
+
+export type WatchProvider = {
+  provider_id: number
+  provider_name: string
+  logo_path: string
+}
+
+export type Company = {
+  id: number
+  name: string
+  logo_path: string | null
+}

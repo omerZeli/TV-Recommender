@@ -355,6 +355,9 @@ export function TvSearch() {
             <button className="header-nav-btn" onClick={() => navigate('/watchlist')}>
               My Watchlist
             </button>
+            <button className="header-nav-btn" onClick={() => navigate('/preferences')}>
+              Preferences
+            </button>
           </div>
           <div className="user-section">
             {user && (
