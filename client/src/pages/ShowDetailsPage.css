@@ -194,6 +194,43 @@
   gap: 2rem;
 }
 
+.sdp-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.sdp-watchlist-btn {
+  width: fit-content;
+  min-width: 180px;
+  border: 0;
+  border-radius: 0.6rem;
+  background: #314dab;
+  color: #fff;
+  font-weight: 700;
+  padding: 0.65rem 1rem;
+  cursor: pointer;
+}
+
+.sdp-watchlist-btn:not(:disabled):hover {
+  background: #243c8a;
+}
+
+.sdp-watchlist-btn:disabled {
+  opacity: 0.75;
+  cursor: default;
+}
+
+.sdp-watchlist-btn--added {
+  background: #1d7f4d;
+}
+
+.sdp-watchlist-error {
+  margin: 0;
+  color: #a10824;
+  font-size: 0.92rem;
+}
+
 /* ── Meta grid ─────────────────────────────────────────────────── */
 .sdp-meta-grid {
   display: grid;

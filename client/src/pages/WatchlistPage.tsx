@@ -1,0 +1,149 @@
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+import type { TmdbTvResult } from '../types/tv'
+import '../TvSearch.css'
+import './WatchlistPage.css'
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api'
+const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w342'
+
+export function WatchlistPage() {
+  const { user, token, logout } = useAuth()
+  const navigate = useNavigate()
+  const [items, setItems] = useState<TmdbTvResult[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!token) return
+
+    const controller = new AbortController()
+
+    const fetchWatchlist = async () => {
+      setIsLoading(true)
+      setError(null)
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/watchlist`, {
+          method: 'GET',
+          headers: {
+            accept: 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          signal: controller.signal,
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch watchlist')
+        }
+
+        const data = (await response.json()) as TmdbTvResult[]
+        setItems(data)
+      } catch (fetchError) {
+        if (fetchError instanceof DOMException && fetchError.name === 'AbortError') {
+          return
+        }
+
+        setError('Could not load your watchlist. Please try again.')
+        setItems([])
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchWatchlist().catch(() => {
+      setError('Could not load your watchlist. Please try again.')
+      setIsLoading(false)
+    })
+
+    return () => {
+      controller.abort()
+    }
+  }, [token])
+
+  const handleCardClick = (show: TmdbTvResult) => {
+    navigate(`/show/${show.id}`, { state: { show } })
+  }
+
+  return (
+    <>
+      <header className="header">
+        <div className="header-content">
+          <h1>TV Recommender</h1>
+          <div className="header-nav-actions">
+            <button className="header-nav-btn" onClick={() => navigate('/')}>
+              Search
+            </button>
+            <button className="header-nav-btn header-nav-btn--active" onClick={() => navigate('/watchlist')}>
+              My Watchlist
+            </button>
+          </div>
+          <div className="user-section">
+            {user && (
+              <>
+                <span className="user-email">{user.email}</span>
+                <button className="logout-btn" onClick={logout}>
+                  Logout
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <main className="app">
+        <header className="hero">
+          <h2>My Watchlist</h2>
+        </header>
+
+        {error && <p className="error">{error}</p>}
+
+        {!error && !isLoading && (
+          <p className="results-meta">
+            {items.length === 0
+              ? 'Your watchlist is empty. Add shows from Search or Show Details.'
+              : `${items.length} show${items.length === 1 ? '' : 's'} saved`}
+          </p>
+        )}
+
+        <section className="results-grid" aria-live="polite">
+          {!isLoading &&
+            items.map((show) => (
+              <article
+                className="card"
+                key={show.id}
+                onClick={() => handleCardClick(show)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    handleCardClick(show)
+                  }
+                }}
+              >
+                {show.poster_path ? (
+                  <img
+                    src={`${TMDB_IMAGE_BASE}${show.poster_path}`}
+                    alt={`${show.name} poster`}
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="poster-fallback">No image</div>
+                )}
+
+                <div className="card-content">
+                  <h2>{show.name}</h2>
+                  <p className="meta">
+                    {show.first_air_date || 'Unknown date'} • ⭐{' '}
+                    {show.vote_average.toFixed(1)} ({show.vote_count})
+                  </p>
+                  <p className="overview">{show.overview || 'No overview available.'}</p>
+                </div>
+              </article>
+            ))}
+        </section>
+      </main>
+    </>
+  )
+}

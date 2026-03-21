@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { TvModule } from './tv/tv.module';
+import { WatchlistModule } from './watchlist/watchlist.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { TvModule } from './tv/tv.module';
     AuthModule,
     UsersModule,
     TvModule,
+    WatchlistModule,
   ],
 })
 export class AppModule {}

@@ -1,21 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import type { TmdbTvResult } from '../types/tv'
 import './ShowDetailsPage.css'
-
-type TmdbTvResult = {
-  id: number
-  name: string
-  overview: string
-  poster_path: string | null
-  backdrop_path: string | null
-  first_air_date: string
-  vote_average: number
-  vote_count: number
-  original_name: string
-  original_language: string
-  origin_country: string[]
-}
 
 type TmdbVideo = {
   id: string
@@ -32,6 +19,20 @@ type TmdbVideosResponse = {
   results: TmdbVideo[]
 }
 
+type AddWatchlistPayload = {
+  id: number
+  name: string
+  overview: string
+  poster_path: string | null
+  backdrop_path: string | null
+  first_air_date: string
+  vote_average: number
+  vote_count: number
+  original_name: string
+  original_language: string
+  origin_country: string[]
+}
+
 const TMDB_POSTER_BASE = 'https://image.tmdb.org/t/p/w500'
 const TMDB_BACKDROP_BASE = 'https://image.tmdb.org/t/p/w1280'
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api'
@@ -43,6 +44,9 @@ export function ShowDetailsPage() {
   const [videos, setVideos] = useState<TmdbVideo[]>([])
   const [isLoadingVideos, setIsLoadingVideos] = useState(false)
   const [videosError, setVideosError] = useState<string | null>(null)
+  const [isInWatchlist, setIsInWatchlist] = useState(false)
+  const [isSavingToWatchlist, setIsSavingToWatchlist] = useState(false)
+  const [watchlistError, setWatchlistError] = useState<string | null>(null)
 
   const show = (location.state as { show?: TmdbTvResult } | null)?.show
 
@@ -103,6 +107,87 @@ export function ShowDetailsPage() {
     }
   }, [show, token])
 
+  useEffect(() => {
+    if (!show || !token) return
+
+    const controller = new AbortController()
+
+    const fetchWatchlistState = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/watchlist`, {
+          method: 'GET',
+          headers: {
+            accept: 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          signal: controller.signal,
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch watchlist')
+        }
+
+        const data = (await response.json()) as TmdbTvResult[]
+        setIsInWatchlist(data.some((item) => item.id === show.id))
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return
+        }
+      }
+    }
+
+    fetchWatchlistState().catch(() => {
+      setIsInWatchlist(false)
+    })
+
+    return () => {
+      controller.abort()
+    }
+  }, [show, token])
+
+  const handleAddToWatchlist = async () => {
+    if (!show || !token || isInWatchlist) return
+
+    setIsSavingToWatchlist(true)
+    setWatchlistError(null)
+
+    const payload: AddWatchlistPayload = {
+      id: show.id,
+      name: show.name,
+      overview: show.overview ?? '',
+      poster_path: show.poster_path,
+      backdrop_path: show.backdrop_path,
+      first_air_date: show.first_air_date ?? '',
+      vote_average: show.vote_average ?? 0,
+      vote_count: show.vote_count ?? 0,
+      original_name: show.original_name ?? show.name,
+      original_language: show.original_language ?? '',
+      origin_country: Array.isArray(show.origin_country) ? show.origin_country : [],
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/watchlist`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to add to watchlist')
+      }
+
+      setIsInWatchlist(true)
+    } catch {
+      setWatchlistError('Could not add this show to your watchlist.')
+    } finally {
+      setIsSavingToWatchlist(false)
+    }
+  }
+
   const youtubeVideos = useMemo(() => {
     return videos
       .filter((video) => video.site === 'YouTube' && Boolean(video.key))
@@ -129,7 +214,10 @@ export function ShowDetailsPage() {
       <header className="sdp-header">
         <div className="sdp-header-content">
           <button className="sdp-back-btn" onClick={() => navigate(-1)} aria-label="Go back">
-            ← Back to Search
+            ← Back
+          </button>
+          <button className="sdp-back-btn" onClick={() => navigate('/watchlist')} aria-label="Go to watchlist">
+            My Watchlist
           </button>
           <span className="sdp-site-title">TV Recommender</span>
           <div className="sdp-user-section">
@@ -184,6 +272,17 @@ export function ShowDetailsPage() {
           </aside>
 
           <section className="sdp-details">
+            <div className="sdp-actions">
+              <button
+                className={`sdp-watchlist-btn ${isInWatchlist ? 'sdp-watchlist-btn--added' : ''}`}
+                onClick={handleAddToWatchlist}
+                disabled={isInWatchlist || isSavingToWatchlist}
+              >
+                {isInWatchlist ? 'In Watchlist' : isSavingToWatchlist ? 'Adding...' : 'Add to Watchlist'}
+              </button>
+              {watchlistError && <p className="sdp-watchlist-error">{watchlistError}</p>}
+            </div>
+
             <div className="sdp-meta-grid">
               <div className="sdp-meta-item sdp-meta-item--wide">
                 <span className="sdp-meta-label">First Air Date</span>

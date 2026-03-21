@@ -5,7 +5,9 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Unique,
+  OneToMany,
 } from 'typeorm';
+import { WatchlistItem } from '../watchlist/watchlist-item.entity';
 
 @Entity('users')
 @Unique(['email'])
@@ -27,4 +29,7 @@ export class User {
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  @OneToMany(() => WatchlistItem, (watchlistItem) => watchlistItem.user)
+  watchlistItems: WatchlistItem[];
 }

@@ -1,12 +1,20 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { FormEvent } from 'react'
+import type { FormEvent, MouseEvent } from 'react'
 import './TvSearch.css'
 import { useAuth } from './context/AuthContext'
+import type { TmdbTvResult } from './types/tv'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api'
 
-type TmdbTvResult = {
+type TmdbSearchResponse = {
+  page: number
+  results: TmdbTvResult[]
+  total_pages: number
+  total_results: number
+}
+
+type AddWatchlistPayload = {
   id: number
   name: string
   overview: string
@@ -18,13 +26,6 @@ type TmdbTvResult = {
   original_name: string
   original_language: string
   origin_country: string[]
-}
-
-type TmdbSearchResponse = {
-  page: number
-  results: TmdbTvResult[]
-  total_pages: number
-  total_results: number
 }
 
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w342'
@@ -83,8 +84,48 @@ export function TvSearch() {
   const [results, setResults] = useState<TmdbTvResult[]>(initialState.results)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(initialState.error)
+  const [watchlistIds, setWatchlistIds] = useState<number[]>([])
+  const [isAddingShowId, setIsAddingShowId] = useState<number | null>(null)
   const { user, token, logout } = useAuth()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (!token) return
+
+    const controller = new AbortController()
+
+    const fetchWatchlist = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/watchlist`, {
+          method: 'GET',
+          headers: {
+            accept: 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          signal: controller.signal,
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch watchlist')
+        }
+
+        const data = (await response.json()) as TmdbTvResult[]
+        setWatchlistIds(data.map((item) => item.id))
+      } catch (watchlistError) {
+        if (watchlistError instanceof DOMException && watchlistError.name === 'AbortError') {
+          return
+        }
+      }
+    }
+
+    fetchWatchlist().catch(() => {
+      setWatchlistIds([])
+    })
+
+    return () => {
+      controller.abort()
+    }
+  }, [token])
 
   useEffect(() => {
     const stateToPersist: TvSearchStoredState = {
@@ -141,11 +182,74 @@ export function TvSearch() {
     navigate(`/show/${show.id}`, { state: { show } })
   }
 
+  const handleAddToWatchlist = async (
+    event: MouseEvent<HTMLButtonElement>,
+    show: TmdbTvResult,
+  ) => {
+    event.stopPropagation()
+
+    if (!token || watchlistIds.includes(show.id)) {
+      return
+    }
+
+    setIsAddingShowId(show.id)
+
+    const payload: AddWatchlistPayload = {
+      id: show.id,
+      name: show.name,
+      overview: show.overview ?? '',
+      poster_path: show.poster_path,
+      backdrop_path: show.backdrop_path,
+      first_air_date: show.first_air_date ?? '',
+      vote_average: show.vote_average ?? 0,
+      vote_count: show.vote_count ?? 0,
+      original_name: show.original_name ?? show.name,
+      original_language: show.original_language ?? '',
+      origin_country: Array.isArray(show.origin_country) ? show.origin_country : [],
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/watchlist`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to add show to watchlist')
+      }
+
+      setWatchlistIds((prevIds) => {
+        if (prevIds.includes(show.id)) {
+          return prevIds
+        }
+
+        return [...prevIds, show.id]
+      })
+    } catch {
+      setError('Could not add this show to your watchlist. Please try again.')
+    } finally {
+      setIsAddingShowId(null)
+    }
+  }
+
   return (
     <>
       <header className="header">
         <div className="header-content">
           <h1>TV Recommender</h1>
+          <div className="header-nav-actions">
+            <button className="header-nav-btn header-nav-btn--active" onClick={() => navigate('/')}>
+              Search
+            </button>
+            <button className="header-nav-btn" onClick={() => navigate('/watchlist')}>
+              My Watchlist
+            </button>
+          </div>
           <div className="user-section">
             {user && (
               <>
@@ -214,6 +318,18 @@ export function TvSearch() {
                 {show.vote_average.toFixed(1)} ({show.vote_count})
               </p>
               <p className="overview">{show.overview || 'No overview available.'}</p>
+              <button
+                className={`watchlist-btn ${watchlistIds.includes(show.id) ? 'watchlist-btn--added' : ''}`}
+                type="button"
+                onClick={(event) => handleAddToWatchlist(event, show)}
+                disabled={watchlistIds.includes(show.id) || isAddingShowId === show.id}
+              >
+                {watchlistIds.includes(show.id)
+                  ? 'In Watchlist'
+                  : isAddingShowId === show.id
+                    ? 'Adding...'
+                    : 'Add to Watchlist'}
+              </button>
             </div>
           </article>
         ))}

@@ -19,6 +19,27 @@
   width: 100%;
 }
 
+.header-nav-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.header-nav-btn {
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  border-radius: 0.5rem;
+  padding: 0.45rem 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.header-nav-btn--active {
+  background: #fff;
+  color: #503f96;
+  border-color: #fff;
+}
+
 .header h1 {
   margin: 0;
   font-size: 1.6rem;
@@ -185,6 +206,32 @@
   overflow: hidden;
 }
 
+.watchlist-btn {
+  margin-top: 0.85rem;
+  width: 100%;
+  border: 0;
+  border-radius: 0.6rem;
+  background: #314dab;
+  color: #fff;
+  font-weight: 600;
+  padding: 0.65rem 0.75rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.watchlist-btn:not(:disabled):hover {
+  background: #243c8a;
+}
+
+.watchlist-btn:disabled {
+  cursor: default;
+  opacity: 0.75;
+}
+
+.watchlist-btn--added {
+  background: #1d7f4d;
+}
+
 @media (max-width: 720px) {
   .search-bar {
     grid-template-columns: 1fr;
@@ -208,6 +255,10 @@
     flex-direction: column;
     gap: 1rem;
     text-align: center;
+  }
+
+  .header-nav-actions {
+    order: 3;
   }
 
   .header h1 {

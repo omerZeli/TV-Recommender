@@ -1,0 +1,26 @@
+.header-nav-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.header-nav-btn {
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  border-radius: 0.5rem;
+  padding: 0.45rem 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.header-nav-btn--active {
+  background: #fff;
+  color: #503f96;
+  border-color: #fff;
+}
+
+@media (max-width: 720px) {
+  .header-nav-actions {
+    order: 3;
+  }
+}
