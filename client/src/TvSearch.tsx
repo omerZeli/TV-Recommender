@@ -289,11 +289,12 @@ export function TvSearch() {
   ) => {
     event.stopPropagation()
 
-    if (!token || watchedShowIds.includes(show.id)) {
+    if (!token) {
       return
     }
 
     setIsMarkingWatchedShowId(show.id)
+    const isCurrentlyWatched = watchedShowIds.includes(show.id)
 
     const payload: AddWatchlistPayload = {
       id: show.id,
@@ -310,8 +311,8 @@ export function TvSearch() {
     }
 
     const watchPayload: SetWatchedPayload = {
-      watched: true,
-      show: payload,
+      watched: !isCurrentlyWatched,
+      show: isCurrentlyWatched ? undefined : payload,
     }
 
     try {
@@ -329,8 +330,12 @@ export function TvSearch() {
         throw new Error('Failed to mark show as watched')
       }
 
-      setWatchlistIds((prevIds) => (prevIds.includes(show.id) ? prevIds : [...prevIds, show.id]))
-      setWatchedShowIds((prevIds) => (prevIds.includes(show.id) ? prevIds : [...prevIds, show.id]))
+      if (!isCurrentlyWatched) {
+        setWatchlistIds((prevIds) => (prevIds.includes(show.id) ? prevIds : [...prevIds, show.id]))
+        setWatchedShowIds((prevIds) => (prevIds.includes(show.id) ? prevIds : [...prevIds, show.id]))
+      } else {
+        setWatchedShowIds((prevIds) => prevIds.filter((id) => id !== show.id))
+      }
     } catch {
       setError('Could not mark this show as watched. Please try again.')
     } finally {
@@ -445,11 +450,10 @@ export function TvSearch() {
                 <button
                   className={`watch-eye-btn ${watchedShowIds.includes(show.id) ? 'watch-eye-btn--done' : ''}`}
                   type="button"
-                  aria-label={watchedShowIds.includes(show.id) ? 'Watched' : 'Mark as watched'}
-                  title={watchedShowIds.includes(show.id) ? 'Watched' : 'Mark as watched'}
+                  aria-label={watchedShowIds.includes(show.id) ? 'Mark as unwatched' : 'Mark as watched'}
+                  title={watchedShowIds.includes(show.id) ? 'Mark as unwatched' : 'Mark as watched'}
                   onClick={(event) => handleMarkAsWatched(event, show)}
                   disabled={
-                    watchedShowIds.includes(show.id) ||
                     isMarkingWatchedShowId === show.id ||
                     isAddingShowId === show.id ||
                     isRemovingShowId === show.id

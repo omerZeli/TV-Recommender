@@ -103,22 +103,23 @@ export function WatchlistPage() {
 
   const handleMarkAsWatched = async (
     event: MouseEvent<HTMLButtonElement>,
-    showId: number,
+    show: TmdbTvResult,
   ) => {
     event.stopPropagation()
     if (!token) return
 
-    setIsMarkingWatchedShowId(showId)
+    setIsMarkingWatchedShowId(show.id)
+    const nextWatchedState = !show.watched
 
     try {
-      const response = await fetch(`${API_BASE_URL}/watchlist/${showId}/watched`, {
+      const response = await fetch(`${API_BASE_URL}/watchlist/${show.id}/watched`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           accept: 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ watched: true }),
+        body: JSON.stringify({ watched: nextWatchedState }),
       })
 
       if (!response.ok) {
@@ -127,10 +128,10 @@ export function WatchlistPage() {
 
       setItems((prevItems) =>
         prevItems.map((item) =>
-          item.id === showId
+          item.id === show.id
             ? {
                 ...item,
-                watched: true,
+                watched: nextWatchedState,
               }
             : item,
         ),
@@ -227,10 +228,10 @@ export function WatchlistPage() {
                     <button
                       className={`watch-eye-btn ${show.watched ? 'watch-eye-btn--done' : ''}`}
                       type="button"
-                      aria-label={show.watched ? 'Watched' : 'Mark as watched'}
-                      title={show.watched ? 'Watched' : 'Mark as watched'}
-                      onClick={(event) => handleMarkAsWatched(event, show.id)}
-                      disabled={show.watched || isRemovingShowId === show.id || isMarkingWatchedShowId === show.id}
+                      aria-label={show.watched ? 'Mark as unwatched' : 'Mark as watched'}
+                      title={show.watched ? 'Mark as unwatched' : 'Mark as watched'}
+                      onClick={(event) => handleMarkAsWatched(event, show)}
+                      disabled={isRemovingShowId === show.id || isMarkingWatchedShowId === show.id}
                     >
                       {isMarkingWatchedShowId === show.id
                         ? '...'

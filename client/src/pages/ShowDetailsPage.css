@@ -200,6 +200,12 @@
   gap: 0.6rem;
 }
 
+.sdp-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
 .sdp-watchlist-btn {
   width: fit-content;
   min-width: 180px;
@@ -227,6 +233,35 @@
 
 .sdp-watchlist-btn--remove:not(:disabled):hover {
   background: #842525;
+}
+
+.sdp-watch-eye-btn {
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  border-radius: 0.6rem;
+  background: #314dab;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.sdp-watch-eye-btn:not(:disabled):hover {
+  background: #243c8a;
+}
+
+.sdp-watch-eye-btn:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+
+.sdp-watch-eye-btn--done {
+  background: #1d7f4d;
 }
 
 .sdp-watchlist-error {

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import VisibilityIcon from '@mui/icons-material/Visibility'
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
 import { useAuth } from '../context/AuthContext'
 import type { TmdbTvResult } from '../types/tv'
 import './ShowDetailsPage.css'
@@ -33,6 +35,11 @@ type AddWatchlistPayload = {
   origin_country: string[]
 }
 
+type SetWatchedPayload = {
+  watched: boolean
+  show?: AddWatchlistPayload
+}
+
 const TMDB_POSTER_BASE = 'https://image.tmdb.org/t/p/w500'
 const TMDB_BACKDROP_BASE = 'https://image.tmdb.org/t/p/w1280'
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api'
@@ -45,8 +52,10 @@ export function ShowDetailsPage() {
   const [isLoadingVideos, setIsLoadingVideos] = useState(false)
   const [videosError, setVideosError] = useState<string | null>(null)
   const [isInWatchlist, setIsInWatchlist] = useState(false)
+  const [isWatched, setIsWatched] = useState(false)
   const [isSavingToWatchlist, setIsSavingToWatchlist] = useState(false)
   const [isRemovingFromWatchlist, setIsRemovingFromWatchlist] = useState(false)
+  const [isTogglingWatched, setIsTogglingWatched] = useState(false)
   const [watchlistError, setWatchlistError] = useState<string | null>(null)
 
   const show = (location.state as { show?: TmdbTvResult } | null)?.show
@@ -129,7 +138,9 @@ export function ShowDetailsPage() {
         }
 
         const data = (await response.json()) as TmdbTvResult[]
-        setIsInWatchlist(data.some((item) => item.id === show.id))
+        const existing = data.find((item) => item.id === show.id)
+        setIsInWatchlist(Boolean(existing))
+        setIsWatched(Boolean(existing?.watched))
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') {
           return
@@ -139,6 +150,7 @@ export function ShowDetailsPage() {
 
     fetchWatchlistState().catch(() => {
       setIsInWatchlist(false)
+      setIsWatched(false)
     })
 
     return () => {
@@ -209,10 +221,63 @@ export function ShowDetailsPage() {
       }
 
       setIsInWatchlist(false)
+      setIsWatched(false)
     } catch {
       setWatchlistError('Could not remove this show from your watchlist.')
     } finally {
       setIsRemovingFromWatchlist(false)
+    }
+  }
+
+  const handleToggleWatched = async () => {
+    if (!show || !token) return
+
+    setIsTogglingWatched(true)
+    setWatchlistError(null)
+
+    const payload: AddWatchlistPayload = {
+      id: show.id,
+      name: show.name,
+      overview: show.overview ?? '',
+      poster_path: show.poster_path,
+      backdrop_path: show.backdrop_path,
+      first_air_date: show.first_air_date ?? '',
+      vote_average: show.vote_average ?? 0,
+      vote_count: show.vote_count ?? 0,
+      original_name: show.original_name ?? show.name,
+      original_language: show.original_language ?? '',
+      origin_country: Array.isArray(show.origin_country) ? show.origin_country : [],
+    }
+
+    const nextWatchedState = !isWatched
+    const watchPayload: SetWatchedPayload = {
+      watched: nextWatchedState,
+      show: nextWatchedState ? payload : undefined,
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/watchlist/${show.id}/watched`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(watchPayload),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update watched status')
+      }
+
+      setIsWatched(nextWatchedState)
+      if (nextWatchedState) {
+        setIsInWatchlist(true)
+      }
+    } catch {
+      setWatchlistError('Could not update watched status for this show.')
+    } finally {
+      setIsTogglingWatched(false)
     }
   }
 
@@ -301,19 +366,35 @@ export function ShowDetailsPage() {
 
           <section className="sdp-details">
             <div className="sdp-actions">
-              <button
-                className={`sdp-watchlist-btn ${isInWatchlist ? 'sdp-watchlist-btn--remove' : ''}`}
-                onClick={isInWatchlist ? handleRemoveFromWatchlist : handleAddToWatchlist}
-                disabled={isSavingToWatchlist || isRemovingFromWatchlist}
-              >
-                {isInWatchlist
-                  ? isRemovingFromWatchlist
-                    ? 'Removing...'
-                    : 'Remove from Watchlist'
-                  : isSavingToWatchlist
-                    ? 'Adding...'
-                    : 'Add to Watchlist'}
-              </button>
+              <div className="sdp-actions-row">
+                <button
+                  className={`sdp-watchlist-btn ${isInWatchlist ? 'sdp-watchlist-btn--remove' : ''}`}
+                  onClick={isInWatchlist ? handleRemoveFromWatchlist : handleAddToWatchlist}
+                  disabled={isSavingToWatchlist || isRemovingFromWatchlist || isTogglingWatched}
+                >
+                  {isInWatchlist
+                    ? isRemovingFromWatchlist
+                      ? 'Removing...'
+                      : 'Remove from Watchlist'
+                    : isSavingToWatchlist
+                      ? 'Adding...'
+                      : 'Add to Watchlist'}
+                </button>
+                <button
+                  className={`sdp-watch-eye-btn ${isWatched ? 'sdp-watch-eye-btn--done' : ''}`}
+                  type="button"
+                  aria-label={isWatched ? 'Mark as unwatched' : 'Mark as watched'}
+                  title={isWatched ? 'Mark as unwatched' : 'Mark as watched'}
+                  onClick={handleToggleWatched}
+                  disabled={isSavingToWatchlist || isRemovingFromWatchlist || isTogglingWatched}
+                >
+                  {isTogglingWatched
+                    ? '...'
+                    : isWatched
+                      ? <VisibilityIcon fontSize="small" />
+                      : <VisibilityOutlinedIcon fontSize="small" />}
+                </button>
+              </div>
               {watchlistError && <p className="sdp-watchlist-error">{watchlistError}</p>}
             </div>
 
