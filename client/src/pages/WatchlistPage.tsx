@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import type { MouseEvent } from 'react'
 import { useAuth } from '../context/AuthContext'
 import type { TmdbTvResult } from '../types/tv'
 import '../TvSearch.css'
@@ -14,6 +15,7 @@ export function WatchlistPage() {
   const [items, setItems] = useState<TmdbTvResult[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isRemovingShowId, setIsRemovingShowId] = useState<number | null>(null)
 
   useEffect(() => {
     if (!token) return
@@ -64,6 +66,36 @@ export function WatchlistPage() {
 
   const handleCardClick = (show: TmdbTvResult) => {
     navigate(`/show/${show.id}`, { state: { show } })
+  }
+
+  const handleRemoveFromWatchlist = async (
+    event: MouseEvent<HTMLButtonElement>,
+    showId: number,
+  ) => {
+    event.stopPropagation()
+    if (!token) return
+
+    setIsRemovingShowId(showId)
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/watchlist/${showId}`, {
+        method: 'DELETE',
+        headers: {
+          accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to remove show from watchlist')
+      }
+
+      setItems((prevItems) => prevItems.filter((item) => item.id !== showId))
+    } catch {
+      setError('Could not remove this show from your watchlist. Please try again.')
+    } finally {
+      setIsRemovingShowId(null)
+    }
   }
 
   return (
@@ -139,6 +171,14 @@ export function WatchlistPage() {
                     {show.vote_average.toFixed(1)} ({show.vote_count})
                   </p>
                   <p className="overview">{show.overview || 'No overview available.'}</p>
+                  <button
+                    className="watchlist-btn watchlist-btn--remove"
+                    type="button"
+                    onClick={(event) => handleRemoveFromWatchlist(event, show.id)}
+                    disabled={isRemovingShowId === show.id}
+                  >
+                    {isRemovingShowId === show.id ? 'Removing...' : 'Remove from Watchlist'}
+                  </button>
                 </div>
               </article>
             ))}

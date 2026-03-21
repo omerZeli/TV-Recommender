@@ -221,8 +221,12 @@
   cursor: default;
 }
 
-.sdp-watchlist-btn--added {
-  background: #1d7f4d;
+.sdp-watchlist-btn--remove {
+  background: #a13030;
+}
+
+.sdp-watchlist-btn--remove:not(:disabled):hover {
+  background: #842525;
 }
 
 .sdp-watchlist-error {

@@ -152,6 +152,8 @@
   box-shadow: 0 10px 24px rgba(54, 30, 2, 0.08);
   transition: transform 0.3s ease, box-shadow 0.3s ease;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
 }
 
 .card:hover {
@@ -183,6 +185,10 @@
 .card-content {
   padding: 0.85rem;
   text-align: left;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 0.55rem;
 }
 
 .card-content h2 {
@@ -191,7 +197,7 @@
 }
 
 .meta {
-  margin: 0.45rem 0;
+  margin: 0;
   color: #645b67;
   font-size: 0.9rem;
 }
@@ -207,7 +213,8 @@
 }
 
 .watchlist-btn {
-  margin-top: 0.85rem;
+  margin-top: auto;
+  padding-top: 0.9rem;
   width: 100%;
   border: 0;
   border-radius: 0.6rem;
@@ -228,8 +235,12 @@
   opacity: 0.75;
 }
 
-.watchlist-btn--added {
-  background: #1d7f4d;
+.watchlist-btn--remove {
+  background: #a13030;
+}
+
+.watchlist-btn--remove:not(:disabled):hover {
+  background: #842525;
 }
 
 @media (max-width: 720px) {

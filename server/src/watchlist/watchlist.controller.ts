@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Post, Request, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+  Request,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AddWatchlistItemDto } from './dto/add-watchlist-item.dto';
 import { WatchlistService } from './watchlist.service';
@@ -44,5 +54,14 @@ export class WatchlistController {
       original_language: item.originalLanguage,
       origin_country: item.originCountry,
     };
+  }
+
+  @Delete(':showId')
+  async remove(
+    @Request() req,
+    @Param('showId', ParseIntPipe) showId: number,
+  ) {
+    const removed = await this.watchlistService.removeForUser(req.user.id, showId);
+    return { removed };
   }
 }

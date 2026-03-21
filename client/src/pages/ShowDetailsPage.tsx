@@ -46,6 +46,7 @@ export function ShowDetailsPage() {
   const [videosError, setVideosError] = useState<string | null>(null)
   const [isInWatchlist, setIsInWatchlist] = useState(false)
   const [isSavingToWatchlist, setIsSavingToWatchlist] = useState(false)
+  const [isRemovingFromWatchlist, setIsRemovingFromWatchlist] = useState(false)
   const [watchlistError, setWatchlistError] = useState<string | null>(null)
 
   const show = (location.state as { show?: TmdbTvResult } | null)?.show
@@ -188,6 +189,33 @@ export function ShowDetailsPage() {
     }
   }
 
+  const handleRemoveFromWatchlist = async () => {
+    if (!show || !token || !isInWatchlist) return
+
+    setIsRemovingFromWatchlist(true)
+    setWatchlistError(null)
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/watchlist/${show.id}`, {
+        method: 'DELETE',
+        headers: {
+          accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to remove from watchlist')
+      }
+
+      setIsInWatchlist(false)
+    } catch {
+      setWatchlistError('Could not remove this show from your watchlist.')
+    } finally {
+      setIsRemovingFromWatchlist(false)
+    }
+  }
+
   const youtubeVideos = useMemo(() => {
     return videos
       .filter((video) => video.site === 'YouTube' && Boolean(video.key))
@@ -274,11 +302,17 @@ export function ShowDetailsPage() {
           <section className="sdp-details">
             <div className="sdp-actions">
               <button
-                className={`sdp-watchlist-btn ${isInWatchlist ? 'sdp-watchlist-btn--added' : ''}`}
-                onClick={handleAddToWatchlist}
-                disabled={isInWatchlist || isSavingToWatchlist}
+                className={`sdp-watchlist-btn ${isInWatchlist ? 'sdp-watchlist-btn--remove' : ''}`}
+                onClick={isInWatchlist ? handleRemoveFromWatchlist : handleAddToWatchlist}
+                disabled={isSavingToWatchlist || isRemovingFromWatchlist}
               >
-                {isInWatchlist ? 'In Watchlist' : isSavingToWatchlist ? 'Adding...' : 'Add to Watchlist'}
+                {isInWatchlist
+                  ? isRemovingFromWatchlist
+                    ? 'Removing...'
+                    : 'Remove from Watchlist'
+                  : isSavingToWatchlist
+                    ? 'Adding...'
+                    : 'Add to Watchlist'}
               </button>
               {watchlistError && <p className="sdp-watchlist-error">{watchlistError}</p>}
             </div>

@@ -86,6 +86,7 @@ export function TvSearch() {
   const [error, setError] = useState<string | null>(initialState.error)
   const [watchlistIds, setWatchlistIds] = useState<number[]>([])
   const [isAddingShowId, setIsAddingShowId] = useState<number | null>(null)
+  const [isRemovingShowId, setIsRemovingShowId] = useState<number | null>(null)
   const { user, token, logout } = useAuth()
   const navigate = useNavigate()
 
@@ -237,6 +238,39 @@ export function TvSearch() {
     }
   }
 
+  const handleRemoveFromWatchlist = async (
+    event: MouseEvent<HTMLButtonElement>,
+    showId: number,
+  ) => {
+    event.stopPropagation()
+
+    if (!token || !watchlistIds.includes(showId)) {
+      return
+    }
+
+    setIsRemovingShowId(showId)
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/watchlist/${showId}`, {
+        method: 'DELETE',
+        headers: {
+          accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to remove show from watchlist')
+      }
+
+      setWatchlistIds((prevIds) => prevIds.filter((id) => id !== showId))
+    } catch {
+      setError('Could not remove this show from your watchlist. Please try again.')
+    } finally {
+      setIsRemovingShowId(null)
+    }
+  }
+
   return (
     <>
       <header className="header">
@@ -319,13 +353,19 @@ export function TvSearch() {
               </p>
               <p className="overview">{show.overview || 'No overview available.'}</p>
               <button
-                className={`watchlist-btn ${watchlistIds.includes(show.id) ? 'watchlist-btn--added' : ''}`}
+                className={`watchlist-btn ${watchlistIds.includes(show.id) ? 'watchlist-btn--remove' : ''}`}
                 type="button"
-                onClick={(event) => handleAddToWatchlist(event, show)}
-                disabled={watchlistIds.includes(show.id) || isAddingShowId === show.id}
+                onClick={(event) =>
+                  watchlistIds.includes(show.id)
+                    ? handleRemoveFromWatchlist(event, show.id)
+                    : handleAddToWatchlist(event, show)
+                }
+                disabled={isAddingShowId === show.id || isRemovingShowId === show.id}
               >
                 {watchlistIds.includes(show.id)
-                  ? 'In Watchlist'
+                  ? isRemovingShowId === show.id
+                    ? 'Removing...'
+                    : 'Remove from Watchlist'
                   : isAddingShowId === show.id
                     ? 'Adding...'
                     : 'Add to Watchlist'}

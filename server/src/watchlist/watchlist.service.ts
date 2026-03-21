@@ -44,4 +44,9 @@ export class WatchlistService {
 
     return this.watchlistRepo.save(item);
   }
+
+  async removeForUser(userId: number, showId: number): Promise<boolean> {
+    const result = await this.watchlistRepo.delete({ userId, showId });
+    return (result.affected ?? 0) > 0;
+  }
 }
