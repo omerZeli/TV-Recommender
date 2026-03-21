@@ -1,8 +1,8 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { FormEvent } from 'react'
 import './TvSearch.css'
 import { useAuth } from './context/AuthContext'
-import { ShowDetailsModal } from './components/ShowDetailsModal'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api'
 
@@ -35,9 +35,8 @@ export function TvSearch() {
   const [results, setResults] = useState<TmdbTvResult[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [selectedShow, setSelectedShow] = useState<TmdbTvResult | null>(null)
-  const [isModalOpen, setIsModalOpen] = useState(false)
   const { user, token, logout } = useAuth()
+  const navigate = useNavigate()
 
   const handleSearch = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -80,13 +79,7 @@ export function TvSearch() {
   }
 
   const handleCardClick = (show: TmdbTvResult) => {
-    setSelectedShow(show)
-    setIsModalOpen(true)
-  }
-
-  const handleCloseModal = () => {
-    setIsModalOpen(false)
-    setSelectedShow(null)
+    navigate(`/show/${show.id}`, { state: { show } })
   }
 
   return (
@@ -167,14 +160,6 @@ export function TvSearch() {
         ))}
       </section>
       </main>
-
-      {selectedShow && (
-        <ShowDetailsModal 
-          show={selectedShow} 
-          isOpen={isModalOpen} 
-          onClose={handleCloseModal}
-        />
-      )}
     </>
   )
 }

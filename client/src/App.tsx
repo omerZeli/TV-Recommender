@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import { Login } from './pages/Login'
 import { Register } from './pages/Register'
 import { TvSearch } from './TvSearch'
+import { ShowDetailsPage } from './pages/ShowDetailsPage'
 
 function AppRoutes() {
   const { token } = useAuth()
@@ -12,6 +13,7 @@ function AppRoutes() {
       {token ? (
         <>
           <Route path="/" element={<TvSearch />} />
+          <Route path="/show/:id" element={<ShowDetailsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </>
       ) : (
