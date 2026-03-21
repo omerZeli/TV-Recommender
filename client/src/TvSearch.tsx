@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import './TvSearch.css'
 import { useAuth } from './context/AuthContext'
+import { ShowDetailsModal } from './components/ShowDetailsModal'
 
 type TmdbTvResult = {
   id: number
@@ -32,6 +33,8 @@ export function TvSearch() {
   const [results, setResults] = useState<TmdbTvResult[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [selectedShow, setSelectedShow] = useState<TmdbTvResult | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
   const { user, logout } = useAuth()
 
   const handleSearch = async (event: FormEvent<HTMLFormElement>) => {
@@ -81,6 +84,16 @@ export function TvSearch() {
     }
   }
 
+  const handleCardClick = (show: TmdbTvResult) => {
+    setSelectedShow(show)
+    setIsModalOpen(true)
+  }
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false)
+    setSelectedShow(null)
+  }
+
   return (
     <>
       <header className="header">
@@ -102,7 +115,6 @@ export function TvSearch() {
       <main className="app">
         <header className="hero">
         <h2>Find Your Next Favorite Show</h2>
-        <p>Search TMDB and discover amazing TV series</p>
       </header>
 
       <form className="search-bar" onSubmit={handleSearch}>
@@ -126,7 +138,18 @@ export function TvSearch() {
 
       <section className="results-grid" aria-live="polite">
         {results.map((show) => (
-          <article className="card" key={show.id}>
+          <article 
+            className="card" 
+            key={show.id}
+            onClick={() => handleCardClick(show)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                handleCardClick(show)
+              }
+            }}
+          >
             {show.poster_path ? (
               <img
                 src={`${TMDB_IMAGE_BASE}${show.poster_path}`}
@@ -149,6 +172,14 @@ export function TvSearch() {
         ))}
       </section>
       </main>
+
+      {selectedShow && (
+        <ShowDetailsModal 
+          show={selectedShow} 
+          isOpen={isModalOpen} 
+          onClose={handleCloseModal}
+        />
+      )}
     </>
   )
 }

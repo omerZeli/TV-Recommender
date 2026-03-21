@@ -130,11 +130,17 @@
   overflow: hidden;
   box-shadow: 0 10px 24px rgba(54, 30, 2, 0.08);
   transition: transform 0.3s ease, box-shadow 0.3s ease;
+  cursor: pointer;
 }
 
 .card:hover {
   transform: translateY(-4px);
   box-shadow: 0 14px 32px rgba(54, 30, 2, 0.12);
+}
+
+.card:focus-visible {
+  outline: 2px solid #cf5a00;
+  outline-offset: 2px;
 }
 
 .card img,
