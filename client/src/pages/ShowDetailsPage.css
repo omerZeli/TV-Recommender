@@ -274,6 +274,87 @@
   font-size: 1rem;
 }
 
+/* ── Videos ────────────────────────────────────────────────────── */
+.sdp-videos {
+  background: #fff;
+  border: 1px solid #e8e2db;
+  border-radius: 0.85rem;
+  padding: 1.25rem 1.35rem;
+  box-shadow: 0 2px 8px rgba(54, 30, 2, 0.06);
+}
+
+.sdp-videos-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+}
+
+.sdp-videos-heading h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #1f1a22;
+}
+
+.sdp-videos-status {
+  font-size: 0.82rem;
+  color: #6c6480;
+  font-weight: 600;
+}
+
+.sdp-videos-error,
+.sdp-videos-empty {
+  margin: 0;
+  color: #4a4152;
+}
+
+.sdp-videos-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.sdp-video-card {
+  border: 1px solid #eee3d8;
+  border-radius: 0.8rem;
+  overflow: hidden;
+  background: #fffdf9;
+}
+
+.sdp-video-frame-wrap {
+  position: relative;
+  width: 100%;
+  padding-top: 56.25%;
+  background: #130e1a;
+}
+
+.sdp-video-frame-wrap iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.sdp-video-meta {
+  padding: 0.75rem 0.85rem;
+}
+
+.sdp-video-meta h3 {
+  margin: 0 0 0.3rem;
+  font-size: 0.95rem;
+  color: #1f1a22;
+  line-height: 1.35;
+}
+
+.sdp-video-meta p {
+  margin: 0;
+  color: #6b6370;
+  font-size: 0.84rem;
+}
+
 /* ── Responsive ────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .sdp-content {
@@ -304,6 +385,10 @@
 
   .sdp-site-title {
     font-size: 1.1rem;
+  }
+
+  .sdp-videos-grid {
+    grid-template-columns: 1fr;
   }
 }
 

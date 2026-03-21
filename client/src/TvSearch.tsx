@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { FormEvent } from 'react'
 import './TvSearch.css'
@@ -28,15 +28,74 @@ type TmdbSearchResponse = {
 }
 
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w342'
+const SEARCH_STATE_STORAGE_KEY = 'tv-search-state'
+const DEFAULT_SEARCH_STATE: TvSearchStoredState = {
+  query: '',
+  searchTerm: '',
+  results: [],
+  error: null,
+}
+
+type TvSearchStoredState = {
+  query: string
+  searchTerm: string
+  results: TmdbTvResult[]
+  error: string | null
+}
+
+const isReloadNavigation = (): boolean => {
+  const navigationEntries = window.performance.getEntriesByType('navigation')
+  const navigationEntry = navigationEntries[0] as PerformanceNavigationTiming | undefined
+  return navigationEntry?.type === 'reload'
+}
+
+let shouldResetStateOnFirstMount = isReloadNavigation()
+
+const getInitialSearchState = (): TvSearchStoredState => {
+  if (shouldResetStateOnFirstMount) {
+    shouldResetStateOnFirstMount = false
+    sessionStorage.removeItem(SEARCH_STATE_STORAGE_KEY)
+    return DEFAULT_SEARCH_STATE
+  }
+
+  try {
+    const raw = sessionStorage.getItem(SEARCH_STATE_STORAGE_KEY)
+    if (!raw) {
+      return DEFAULT_SEARCH_STATE
+    }
+
+    const parsed = JSON.parse(raw) as Partial<TvSearchStoredState>
+    return {
+      query: typeof parsed.query === 'string' ? parsed.query : '',
+      searchTerm: typeof parsed.searchTerm === 'string' ? parsed.searchTerm : '',
+      results: Array.isArray(parsed.results) ? parsed.results : [],
+      error: typeof parsed.error === 'string' || parsed.error === null ? parsed.error : null,
+    }
+  } catch {
+    return DEFAULT_SEARCH_STATE
+  }
+}
 
 export function TvSearch() {
-  const [query, setQuery] = useState('')
-  const [searchTerm, setSearchTerm] = useState('')
-  const [results, setResults] = useState<TmdbTvResult[]>([])
+  const initialState = getInitialSearchState()
+  const [query, setQuery] = useState(initialState.query)
+  const [searchTerm, setSearchTerm] = useState(initialState.searchTerm)
+  const [results, setResults] = useState<TmdbTvResult[]>(initialState.results)
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(initialState.error)
   const { user, token, logout } = useAuth()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    const stateToPersist: TvSearchStoredState = {
+      query,
+      searchTerm,
+      results,
+      error,
+    }
+
+    sessionStorage.setItem(SEARCH_STATE_STORAGE_KEY, JSON.stringify(stateToPersist))
+  }, [query, searchTerm, results, error])
 
   const handleSearch = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()

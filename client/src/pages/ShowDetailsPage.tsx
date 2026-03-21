@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import './ShowDetailsPage.css'
@@ -17,13 +17,32 @@ type TmdbTvResult = {
   origin_country: string[]
 }
 
+type TmdbVideo = {
+  id: string
+  key: string
+  name: string
+  site: string
+  type: string
+  official: boolean
+  published_at: string
+}
+
+type TmdbVideosResponse = {
+  id: number
+  results: TmdbVideo[]
+}
+
 const TMDB_POSTER_BASE = 'https://image.tmdb.org/t/p/w500'
 const TMDB_BACKDROP_BASE = 'https://image.tmdb.org/t/p/w1280'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api'
 
 export function ShowDetailsPage() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { user, logout } = useAuth()
+  const { user, token, logout } = useAuth()
+  const [videos, setVideos] = useState<TmdbVideo[]>([])
+  const [isLoadingVideos, setIsLoadingVideos] = useState(false)
+  const [videosError, setVideosError] = useState<string | null>(null)
 
   const show = (location.state as { show?: TmdbTvResult } | null)?.show
 
@@ -37,6 +56,71 @@ export function ShowDetailsPage() {
       navigate('/', { replace: true })
     }
   }, [navigate, show])
+
+  useEffect(() => {
+    if (!show || !token) return
+
+    const controller = new AbortController()
+
+    const fetchVideos = async () => {
+      setIsLoadingVideos(true)
+      setVideosError(null)
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/tv/${show.id}/videos`, {
+          method: 'GET',
+          headers: {
+            accept: 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          signal: controller.signal,
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch show videos')
+        }
+
+        const data = (await response.json()) as TmdbVideosResponse
+        setVideos(data.results || [])
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return
+        }
+
+        setVideosError('Could not load videos right now.')
+      } finally {
+        setIsLoadingVideos(false)
+      }
+    }
+
+    fetchVideos().catch(() => {
+      setVideosError('Could not load videos right now.')
+      setIsLoadingVideos(false)
+    })
+
+    return () => {
+      controller.abort()
+    }
+  }, [show, token])
+
+  const youtubeVideos = useMemo(() => {
+    return videos
+      .filter((video) => video.site === 'YouTube' && Boolean(video.key))
+      .sort((a, b) => {
+        const score = (video: TmdbVideo) => {
+          if (video.official && video.type === 'Trailer') return 0
+          if (video.type === 'Trailer') return 1
+          if (video.official) return 2
+          return 3
+        }
+
+        const scoreDiff = score(a) - score(b)
+        if (scoreDiff !== 0) return scoreDiff
+
+        return b.published_at.localeCompare(a.published_at)
+      })
+      .slice(0, 6)
+  }, [videos])
 
   if (!show) return null
 
@@ -130,6 +214,44 @@ export function ShowDetailsPage() {
               <h2>Synopsis</h2>
               <p>{show.overview || 'No overview available.'}</p>
             </div>
+
+            <section className="sdp-videos" aria-live="polite">
+              <div className="sdp-videos-heading">
+                <h2>Videos</h2>
+                {isLoadingVideos && <span className="sdp-videos-status">Loading...</span>}
+              </div>
+
+              {videosError && <p className="sdp-videos-error">{videosError}</p>}
+
+              {!isLoadingVideos && !videosError && youtubeVideos.length === 0 && (
+                <p className="sdp-videos-empty">No videos available for this show.</p>
+              )}
+
+              {youtubeVideos.length > 0 && (
+                <div className="sdp-videos-grid">
+                  {youtubeVideos.map((video) => (
+                    <article className="sdp-video-card" key={video.id}>
+                      <div className="sdp-video-frame-wrap">
+                        <iframe
+                          src={`https://www.youtube.com/embed/${video.key}`}
+                          title={video.name}
+                          loading="lazy"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                          allowFullScreen
+                        />
+                      </div>
+                      <div className="sdp-video-meta">
+                        <h3>{video.name}</h3>
+                        <p>
+                          {video.type}
+                          {video.official ? ' • Official' : ''}
+                        </p>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
           </section>
         </div>
       </main>
