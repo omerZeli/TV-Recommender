@@ -4,6 +4,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
 import { useAuth } from '../context/AuthContext'
 import type { TmdbTvDetails, TmdbTvResult } from '../types/tv'
+import { formatDateToDDMMYYYY } from '../utils/date'
 import './ShowDetailsPage.css'
 
 type TmdbVideo = {
@@ -460,13 +461,13 @@ export function ShowDetailsPage() {
             <div className="sdp-meta-grid">
               <div className="sdp-meta-item sdp-meta-item--medium">
                 <span className="sdp-meta-label">First Air Date</span>
-                <span className="sdp-meta-value">{display.first_air_date || 'Unknown'}</span>
+                <span className="sdp-meta-value">{formatDateToDDMMYYYY(display.first_air_date) || 'Unknown'}</span>
               </div>
 
               {details?.last_air_date && (
                 <div className="sdp-meta-item sdp-meta-item--medium">
                   <span className="sdp-meta-label">Last Air Date</span>
-                  <span className="sdp-meta-value">{details.last_air_date}</span>
+                  <span className="sdp-meta-value">{formatDateToDDMMYYYY(details.last_air_date)}</span>
                 </div>
               )}
 

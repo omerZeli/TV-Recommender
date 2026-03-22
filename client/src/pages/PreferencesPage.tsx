@@ -1,7 +1,12 @@
 ﻿import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
+import dayjs, { type Dayjs } from 'dayjs'
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
+import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 import { useAuth } from '../context/AuthContext'
 import type { TvPreferences, WatchProvider, Company } from '../types/tv'
+import { formatDateToDDMMYYYY } from '../utils/date'
 import '../TvSearch.css'
 import './PreferencesPage.css'
 
@@ -204,8 +209,8 @@ export function PreferencesPage() {
     const displayNames = getDisplayNames()
 
     console.log('TV Preferences - API Ready Data:', {
-      airDateGte: preferences.airDateGte || 'Not set',
-      airDateLte: preferences.airDateLte || 'Not set',
+      airDateGte: formatDateToDDMMYYYY(preferences.airDateGte) || 'Not set',
+      airDateLte: formatDateToDDMMYYYY(preferences.airDateLte) || 'Not set',
       episodeRuntimeGte: preferences.episodeRuntimeGte || 'Not set',
       episodeRuntimeLte: preferences.episodeRuntimeLte || 'Not set',
       status: {
@@ -240,6 +245,19 @@ export function PreferencesPage() {
       ...prev,
       [field]: value || undefined,
     }))
+  }
+
+  const getDatePickerValue = (value?: string): Dayjs | null => {
+    if (!value) {
+      return null
+    }
+
+    const parsed = dayjs(value)
+    return parsed.isValid() ? parsed : null
+  }
+
+  const handleDatePickerChange = (field: 'airDateGte' | 'airDateLte', value: Dayjs | null) => {
+    handleDateChange(field, value ? value.format('YYYY-MM-DD') : '')
   }
 
   const handleRuntimeChange = (field: 'episodeRuntimeGte' | 'episodeRuntimeLte', value: string) => {
@@ -293,6 +311,14 @@ export function PreferencesPage() {
     return String(value)
   }
 
+  const formatOptionalDate = (value?: string) => {
+    if (!value) {
+      return 'Any'
+    }
+
+    return formatDateToDDMMYYYY(value) || 'Any'
+  }
+
   const getSummaryLabels = () => {
     const status = preferences.status
       .map((id) => STATUS_OPTIONS.find((item) => item.id === id)?.name)
@@ -337,24 +363,38 @@ export function PreferencesPage() {
           <div className="category-subsection">
             <h3>Air Date Range</h3>
             <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="airDateGte">From Date</label>
-                <input
-                  id="airDateGte"
-                  type="date"
-                  value={preferences.airDateGte || ''}
-                  onChange={(e) => handleDateChange('airDateGte', e.target.value)}
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="airDateLte">To Date</label>
-                <input
-                  id="airDateLte"
-                  type="date"
-                  value={preferences.airDateLte || ''}
-                  onChange={(e) => handleDateChange('airDateLte', e.target.value)}
-                />
-              </div>
+              <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="en-gb">
+                <div className="form-group">
+                  <label htmlFor="airDateGte">From Date</label>
+                  <DatePicker
+                    value={getDatePickerValue(preferences.airDateGte)}
+                    format="DD/MM/YYYY"
+                    onChange={(value) => handleDatePickerChange('airDateGte', value)}
+                    slotProps={{
+                      textField: {
+                        id: 'airDateGte',
+                        placeholder: 'DD/MM/YYYY',
+                        fullWidth: true,
+                      },
+                    }}
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="airDateLte">To Date</label>
+                  <DatePicker
+                    value={getDatePickerValue(preferences.airDateLte)}
+                    format="DD/MM/YYYY"
+                    onChange={(value) => handleDatePickerChange('airDateLte', value)}
+                    slotProps={{
+                      textField: {
+                        id: 'airDateLte',
+                        placeholder: 'DD/MM/YYYY',
+                        fullWidth: true,
+                      },
+                    }}
+                  />
+                </div>
+              </LocalizationProvider>
             </div>
           </div>
 
@@ -621,10 +661,10 @@ export function PreferencesPage() {
               <li className="summary-pair-row">
                 <div className="summary-pair">
                   <span>
-                    <strong>Air Date (From):</strong> {formatOptionalValue(preferences.airDateGte)}
+                    <strong>Air Date (From):</strong> {formatOptionalDate(preferences.airDateGte)}
                   </span>
                   <span>
-                    <strong>Air Date (To):</strong> {formatOptionalValue(preferences.airDateLte)}
+                    <strong>Air Date (To):</strong> {formatOptionalDate(preferences.airDateLte)}
                   </span>
                 </div>
               </li>

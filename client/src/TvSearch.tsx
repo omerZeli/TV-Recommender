@@ -6,6 +6,7 @@ import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
 import './TvSearch.css'
 import { useAuth } from './context/AuthContext'
 import type { TmdbTvResult } from './types/tv'
+import { formatDateToDDMMYYYY } from './utils/date'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api'
 
@@ -423,7 +424,7 @@ export function TvSearch() {
             <div className="card-content">
               <h2>{show.name}</h2>
               <p className="meta">
-                {show.first_air_date || 'Unknown date'} • ⭐{' '}
+                {formatDateToDDMMYYYY(show.first_air_date) || 'Unknown date'} • ⭐{' '}
                 {show.vote_average.toFixed(1)}
               </p>
               <p className="overview">{show.overview || 'No overview available.'}</p>

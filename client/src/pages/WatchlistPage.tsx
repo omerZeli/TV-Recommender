@@ -5,6 +5,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
 import { useAuth } from '../context/AuthContext'
 import type { TmdbTvResult } from '../types/tv'
+import { formatDateToDDMMYYYY } from '../utils/date'
 import '../TvSearch.css'
 import './WatchlistPage.css'
 
@@ -169,6 +170,9 @@ export function WatchlistPage() {
             <button className="header-nav-btn header-nav-btn--active" onClick={() => navigate('/watchlist')}>
               My Watchlist
             </button>
+            <button className="header-nav-btn" onClick={() => navigate('/preferences')}>
+              Preferences
+            </button>
           </div>
           <div className="user-section">
             {user && (
@@ -243,7 +247,7 @@ export function WatchlistPage() {
                 <div className="card-content">
                   <h2>{show.name}</h2>
                   <p className="meta">
-                    {show.first_air_date || 'Unknown date'} • ⭐{' '}
+                    {formatDateToDDMMYYYY(show.first_air_date) || 'Unknown date'} • ⭐{' '}
                     {show.vote_average.toFixed(1)}
                   </p>
                   <p className="overview">{show.overview || 'No overview available.'}</p>
