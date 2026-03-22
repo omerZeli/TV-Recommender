@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import type { TvPreferences, WatchProvider, Company } from '../types/tv'
+import '../TvSearch.css'
 import './PreferencesPage.css'
 
 // Status codes from TMDB
@@ -61,8 +62,9 @@ const COUNTRY_OPTIONS = [
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api'
 
 export function PreferencesPage() {
-  const { token } = useAuth()
+  const { user, token, logout } = useAuth()
   const navigate = useNavigate()
+  const [currentSlide, setCurrentSlide] = useState(0)
   const [preferences, setPreferences] = useState<TvPreferences>({
     originCountries: [],
     originalLanguages: [],
@@ -78,7 +80,47 @@ export function PreferencesPage() {
   const [loadingCompanies, setLoadingCompanies] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Load watch providers from local storage or initialize
+  const getDisplayNames = () => {
+    const statusNames = preferences.status.map((id) => {
+      const status = STATUS_OPTIONS.find((s) => s.id === id)
+      return status ? `${id} (${status.name})` : id
+    })
+
+    const typeNames = preferences.type.map((id) => {
+      const type = TYPE_OPTIONS.find((t) => t.id === id)
+      return type ? `${id} (${type.name})` : id
+    })
+
+    const languageNames = preferences.originalLanguages.map((code) => {
+      const lang = LANGUAGE_OPTIONS.find((l) => l.code === code)
+      return lang ? `${code} (${lang.name})` : code
+    })
+
+    const countryNames = preferences.originCountries.map((code) => {
+      const country = COUNTRY_OPTIONS.find((c) => c.code === code)
+      return country ? `${code} (${country.name})` : code
+    })
+
+    const providerNames = preferences.watchProviders.map((id) => {
+      const provider = watchProviders.find((p) => p.provider_id === id)
+      return provider ? `${id} (${provider.provider_name})` : id
+    })
+
+    const companyNames = preferences.companies.map((id) => {
+      const company = companies.find((c) => c.id === id)
+      return company ? `${id} (${company.name})` : id
+    })
+
+    return {
+      statusNames,
+      typeNames,
+      languageNames,
+      countryNames,
+      providerNames,
+      companyNames,
+    }
+  }
+
   useEffect(() => {
     const savedPreferences = localStorage.getItem('tv-preferences')
     if (savedPreferences) {
@@ -90,12 +132,10 @@ export function PreferencesPage() {
     }
   }, [])
 
-  // Save preferences to local storage whenever they change
   useEffect(() => {
     localStorage.setItem('tv-preferences', JSON.stringify(preferences))
   }, [preferences])
 
-  // Fetch watch providers from backend
   useEffect(() => {
     const fetchWatchProviders = async () => {
       try {
@@ -131,7 +171,6 @@ export function PreferencesPage() {
     }
   }, [token])
 
-  // Fetch popular companies from backend
   useEffect(() => {
     const fetchCompanies = async () => {
       try {
@@ -161,52 +200,10 @@ export function PreferencesPage() {
     }
   }, [token])
 
-  // Log preferences whenever they change - showing data that will be sent to API
   useEffect(() => {
-    const getDisplayNames = () => {
-      const statusNames = preferences.status.map((id) => {
-        const status = STATUS_OPTIONS.find((s) => s.id === id)
-        return status ? `${id} (${status.name})` : id
-      })
-
-      const typeNames = preferences.type.map((id) => {
-        const type = TYPE_OPTIONS.find((t) => t.id === id)
-        return type ? `${id} (${type.name})` : id
-      })
-
-      const languageNames = preferences.originalLanguages.map((code) => {
-        const lang = LANGUAGE_OPTIONS.find((l) => l.code === code)
-        return lang ? `${code} (${lang.name})` : code
-      })
-
-      const countryNames = preferences.originCountries.map((code) => {
-        const country = COUNTRY_OPTIONS.find((c) => c.code === code)
-        return country ? `${code} (${country.name})` : code
-      })
-
-      const providerNames = preferences.watchProviders.map((id) => {
-        const provider = watchProviders.find((p) => p.provider_id === id)
-        return provider ? `${id} (${provider.provider_name})` : id
-      })
-
-      const companyNames = preferences.companies.map((id) => {
-        const company = companies.find((c) => c.id === id)
-        return company ? `${id} (${company.name})` : id
-      })
-
-      return {
-        statusNames,
-        typeNames,
-        languageNames,
-        countryNames,
-        providerNames,
-        companyNames,
-      }
-    }
-
     const displayNames = getDisplayNames()
 
-    console.log('📺 TV Preferences - API Ready Data:', {
+    console.log('TV Preferences - API Ready Data:', {
       airDateGte: preferences.airDateGte || 'Not set',
       airDateLte: preferences.airDateLte || 'Not set',
       episodeRuntimeGte: preferences.episodeRuntimeGte || 'Not set',
@@ -260,11 +257,11 @@ export function PreferencesPage() {
           ...prev,
           [field]: [...current, value],
         }
-      } else {
-        return {
-          ...prev,
-          [field]: current.filter((item) => item !== value),
-        }
+      }
+
+      return {
+        ...prev,
+        [field]: current.filter((item) => item !== value),
       }
     })
   }
@@ -280,225 +277,401 @@ export function PreferencesPage() {
     })
   }
 
+  const formatSelectedValues = (values: Array<string | number>) => {
+    if (values.length === 0) {
+      return 'Any'
+    }
+
+    return values.join(', ')
+  }
+
+  const formatOptionalValue = (value?: string | number) => {
+    if (value === undefined || value === null || value === '') {
+      return 'Any'
+    }
+
+    return String(value)
+  }
+
+  const getSummaryLabels = () => {
+    const status = preferences.status
+      .map((id) => STATUS_OPTIONS.find((item) => item.id === id)?.name)
+      .filter((value): value is string => Boolean(value))
+
+    const type = preferences.type
+      .map((id) => TYPE_OPTIONS.find((item) => item.id === id)?.name)
+      .filter((value): value is string => Boolean(value))
+
+    const languages = preferences.originalLanguages
+      .map((code) => LANGUAGE_OPTIONS.find((item) => item.code === code)?.name)
+      .filter((value): value is string => Boolean(value))
+
+    const countries = preferences.originCountries
+      .map((code) => COUNTRY_OPTIONS.find((item) => item.code === code)?.name)
+      .filter((value): value is string => Boolean(value))
+
+    const watchProviderNames = preferences.watchProviders
+      .map((id) => watchProviders.find((item) => item.provider_id === id)?.provider_name)
+      .filter((value): value is string => Boolean(value))
+
+    const companyNames = preferences.companies
+      .map((id) => companies.find((item) => item.id === id)?.name)
+      .filter((value): value is string => Boolean(value))
+
+    return {
+      status,
+      type,
+      languages,
+      countries,
+      watchProviderNames,
+      companyNames,
+    }
+  }
+
+  const slides: { key: string; title: string; content: ReactNode }[] = [
+    {
+      key: 'air-date-runtime',
+      title: 'Air Date Range and Episode Runtime',
+      content: (
+        <div className="combined-grid">
+          <div className="category-subsection">
+            <h3>Air Date Range</h3>
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="airDateGte">From Date</label>
+                <input
+                  id="airDateGte"
+                  type="date"
+                  value={preferences.airDateGte || ''}
+                  onChange={(e) => handleDateChange('airDateGte', e.target.value)}
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="airDateLte">To Date</label>
+                <input
+                  id="airDateLte"
+                  type="date"
+                  value={preferences.airDateLte || ''}
+                  onChange={(e) => handleDateChange('airDateLte', e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="category-subsection">
+            <h3>Episode Runtime (minutes)</h3>
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="episodeRuntimeGte">Minimum</label>
+                <input
+                  id="episodeRuntimeGte"
+                  type="number"
+                  min="0"
+                  max="200"
+                  value={preferences.episodeRuntimeGte || ''}
+                  onChange={(e) => handleRuntimeChange('episodeRuntimeGte', e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="episodeRuntimeLte">Maximum</label>
+                <input
+                  id="episodeRuntimeLte"
+                  type="number"
+                  min="0"
+                  max="200"
+                  value={preferences.episodeRuntimeLte || ''}
+                  onChange={(e) => handleRuntimeChange('episodeRuntimeLte', e.target.value)}
+                  placeholder="200"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'status-type',
+      title: 'Status and Type',
+      content: (
+        <div className="combined-grid">
+          <div className="category-subsection">
+            <h3>Status</h3>
+            <div className="checkbox-group">
+              {STATUS_OPTIONS.map((status) => (
+                <label key={status.id} className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={(preferences.status as number[]).includes(status.id)}
+                    onChange={(e) => handleMultiSelect('status', status.id, e.target.checked)}
+                  />
+                  <span>{status.name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="category-subsection">
+            <h3>Type</h3>
+            <div className="checkbox-group">
+              {TYPE_OPTIONS.map((type) => (
+                <label key={type.id} className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={(preferences.type as number[]).includes(type.id)}
+                    onChange={(e) => handleMultiSelect('type', type.id, e.target.checked)}
+                  />
+                  <span>{type.name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'language-country',
+      title: 'Original Language and Origin Country',
+      content: (
+        <div className="combined-grid">
+          <div className="category-subsection">
+            <h3>Original Language</h3>
+            <div className="checkbox-group">
+              {LANGUAGE_OPTIONS.map((lang) => (
+                <label key={lang.code} className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={(preferences.originalLanguages as string[]).includes(lang.code)}
+                    onChange={(e) => handleMultiSelect('originalLanguages', lang.code, e.target.checked)}
+                  />
+                  <span>{lang.name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="category-subsection">
+            <h3>Origin Country</h3>
+            <div className="checkbox-group">
+              {COUNTRY_OPTIONS.map((country) => (
+                <label key={country.code} className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={(preferences.originCountries as string[]).includes(country.code)}
+                    onChange={(e) => handleMultiSelect('originCountries', country.code, e.target.checked)}
+                  />
+                  <span>{country.name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'providers',
+      title: 'Watch Providers',
+      content: loadingProviders ? (
+        <p className="loading-text">Loading providers...</p>
+      ) : (
+        <div className="checkbox-group">
+          {watchProviders.map((provider) => (
+            <label key={provider.provider_id} className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={(preferences.watchProviders as number[]).includes(provider.provider_id)}
+                onChange={(e) => handleMultiSelect('watchProviders', provider.provider_id, e.target.checked)}
+              />
+              <span>{provider.provider_name}</span>
+            </label>
+          ))}
+        </div>
+      ),
+    },
+    {
+      key: 'companies',
+      title: 'Production Companies',
+      content: loadingCompanies ? (
+        <p className="loading-text">Loading companies...</p>
+      ) : (
+        <div className="checkbox-group">
+          {companies.map((company) => (
+            <label key={company.id} className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={(preferences.companies as number[]).includes(company.id)}
+                onChange={(e) => handleMultiSelect('companies', company.id, e.target.checked)}
+              />
+              <span>{company.name}</span>
+            </label>
+          ))}
+        </div>
+      ),
+    },
+  ]
+
+  const summaryLabels = getSummaryLabels()
+  const watchProvidersText = formatSelectedValues(summaryLabels.watchProviderNames)
+  const productionCompaniesText = formatSelectedValues(summaryLabels.companyNames)
+  const shouldStackProvidersAndCompanies =
+    watchProvidersText.length > 90 || productionCompaniesText.length > 90
+  const isFirstSlide = currentSlide === 0
+  const isLastSlide = currentSlide === slides.length - 1
+
+  const goToPreviousSlide = () => {
+    if (!isFirstSlide) {
+      setCurrentSlide((prev) => prev - 1)
+    }
+  }
+
+  const goToNextSlide = () => {
+    if (!isLastSlide) {
+      setCurrentSlide((prev) => prev + 1)
+    }
+  }
+
   if (!token) {
     navigate('/login')
     return null
   }
 
   return (
-    <div className="preferences-container">
-      <div className="preferences-header">
-        <h1>TV Show Preferences</h1>
-        <p>Customize your TV show recommendation preferences</p>
-        <button className="back-button" onClick={() => navigate('/')}>
-          ← Back to Search
-        </button>
-      </div>
-
-      {error && <div className="error-message">{error}</div>}
-
-      <form className="preferences-form">
-        {/* Air Date Section */}
-        <div className="form-section">
-          <h2>Air Date Range</h2>
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="airDateGte">From Date</label>
-              <input
-                id="airDateGte"
-                type="date"
-                value={preferences.airDateGte || ''}
-                onChange={(e) => handleDateChange('airDateGte', e.target.value)}
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="airDateLte">To Date</label>
-              <input
-                id="airDateLte"
-                type="date"
-                value={preferences.airDateLte || ''}
-                onChange={(e) => handleDateChange('airDateLte', e.target.value)}
-              />
-            </div>
+    <>
+      <header className="header">
+        <div className="header-content">
+          <h1>TV Recommender</h1>
+          <div className="header-nav-actions">
+            <button className="header-nav-btn" onClick={() => navigate('/')}>
+              Search
+            </button>
+            <button className="header-nav-btn" onClick={() => navigate('/watchlist')}>
+              My Watchlist
+            </button>
+            <button className="header-nav-btn header-nav-btn--active" onClick={() => navigate('/preferences')}>
+              Preferences
+            </button>
+          </div>
+          <div className="user-section">
+            {user && (
+              <>
+                <span className="user-email">{user.email}</span>
+                <button className="logout-btn" onClick={logout}>
+                  Logout
+                </button>
+              </>
+            )}
           </div>
         </div>
+      </header>
 
-        {/* Episode Runtime Section */}
-        <div className="form-section">
-          <h2>Episode Runtime (minutes)</h2>
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="episodeRuntimeGte">Minimum</label>
-              <input
-                id="episodeRuntimeGte"
-                type="number"
-                min="0"
-                max="200"
-                value={preferences.episodeRuntimeGte || ''}
-                onChange={(e) => handleRuntimeChange('episodeRuntimeGte', e.target.value)}
-                placeholder="0"
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="episodeRuntimeLte">Maximum</label>
-              <input
-                id="episodeRuntimeLte"
-                type="number"
-                min="0"
-                max="200"
-                value={preferences.episodeRuntimeLte || ''}
-                onChange={(e) => handleRuntimeChange('episodeRuntimeLte', e.target.value)}
-                placeholder="200"
-              />
-            </div>
-          </div>
-        </div>
+      <main className="app preferences-page">
+        <header className="hero">
+          <h2>TV Show Preferences</h2>
+          <p>Customize your TV show recommendation preferences</p>
+        </header>
 
-        {/* Status Section */}
-        <div className="form-section">
-          <h2>Status</h2>
-          <div className="checkbox-group">
-            {STATUS_OPTIONS.map((status) => (
-              <label key={status.id} className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={(preferences.status as number[]).includes(status.id)}
-                  onChange={(e) => handleMultiSelect('status', status.id, e.target.checked)}
-                />
-                <span>{status.name}</span>
-              </label>
-            ))}
-          </div>
-        </div>
+        {error && <div className="error-message">{error}</div>}
 
-        {/* Type Section */}
-        <div className="form-section">
-          <h2>Type</h2>
-          <div className="checkbox-group">
-            {TYPE_OPTIONS.map((type) => (
-              <label key={type.id} className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={(preferences.type as number[]).includes(type.id)}
-                  onChange={(e) => handleMultiSelect('type', type.id, e.target.checked)}
-                />
-                <span>{type.name}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {/* Original Language Section */}
-        <div className="form-section">
-          <h2>Original Language</h2>
-          <div className="checkbox-group">
-            {LANGUAGE_OPTIONS.map((lang) => (
-              <label key={lang.code} className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={(preferences.originalLanguages as string[]).includes(lang.code)}
-                  onChange={(e) => handleMultiSelect('originalLanguages', lang.code, e.target.checked)}
-                />
-                <span>{lang.name}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {/* Origin Country Section */}
-        <div className="form-section">
-          <h2>Origin Country</h2>
-          <div className="checkbox-group">
-            {COUNTRY_OPTIONS.map((country) => (
-              <label key={country.code} className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={(preferences.originCountries as string[]).includes(country.code)}
-                  onChange={(e) => handleMultiSelect('originCountries', country.code, e.target.checked)}
-                />
-                <span>{country.name}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {/* Watch Providers Section */}
-        <div className="form-section">
-          <h2>Watch Providers</h2>
-          {loadingProviders ? (
-            <p className="loading-text">Loading providers...</p>
-          ) : (
-            <div className="checkbox-group">
-              {watchProviders.map((provider) => (
-                <label key={provider.provider_id} className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={(preferences.watchProviders as number[]).includes(provider.provider_id)}
-                    onChange={(e) => handleMultiSelect('watchProviders', provider.provider_id, e.target.checked)}
-                  />
-                  <span>{provider.provider_name}</span>
-                </label>
+        <form className="preferences-form">
+          <div className="category-slider">
+            <div className="slider-track" style={{ transform: `translateX(-${currentSlide * 100}%)` }}>
+              {slides.map((slide) => (
+                <div key={slide.key} className="form-section slider-slide">
+                  <h2>{slide.title}</h2>
+                  {slide.content}
+                </div>
               ))}
             </div>
-          )}
-        </div>
+          </div>
 
-        {/* Companies Section */}
-        <div className="form-section">
-          <h2>Production Companies</h2>
-          {loadingCompanies ? (
-            <p className="loading-text">Loading companies...</p>
-          ) : (
-            <div className="checkbox-group">
-              {companies.map((company) => (
-                <label key={company.id} className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={(preferences.companies as number[]).includes(company.id)}
-                    onChange={(e) => handleMultiSelect('companies', company.id, e.target.checked)}
-                  />
-                  <span>{company.name}</span>
-                </label>
+          <div className="slider-controls">
+            <button type="button" className="slider-button" onClick={goToPreviousSlide} disabled={isFirstSlide}>
+              Previous
+            </button>
+
+            <div className="slider-dots" aria-label="Preference categories">
+              {slides.map((slide, index) => (
+                <button
+                  key={slide.key}
+                  type="button"
+                  className={`slider-dot ${index === currentSlide ? 'active' : ''}`}
+                  onClick={() => setCurrentSlide(index)}
+                  aria-label={`Go to ${slide.title}`}
+                />
               ))}
             </div>
-          )}
-        </div>
 
-        {/* Action Buttons */}
-        <div className="form-actions">
-          <button type="button" className="reset-button" onClick={handleReset}>
-            Reset Preferences
-          </button>
-          <button type="button" className="back-button" onClick={() => navigate('/')}>
-            Back to Search
-          </button>
-        </div>
+            <button type="button" className="slider-button" onClick={goToNextSlide} disabled={isLastSlide}>
+              Next
+            </button>
+          </div>
 
-        {/* Display saved preferences info */}
-        <div className="preferences-info">
-          <h3>Preferences Summary</h3>
-          <ul>
-            <li>
-              <strong>Status:</strong> {preferences.status.length > 0 ? preferences.status.length : 'None'} selected
-            </li>
-            <li>
-              <strong>Type:</strong> {preferences.type.length > 0 ? preferences.type.length : 'None'} selected
-            </li>
-            <li>
-              <strong>Languages:</strong> {preferences.originalLanguages.length > 0 ? preferences.originalLanguages.length : 'None'} selected
-            </li>
-            <li>
-              <strong>Countries:</strong> {preferences.originCountries.length > 0 ? preferences.originCountries.length : 'None'} selected
-            </li>
-            <li>
-              <strong>Watch Providers:</strong> {preferences.watchProviders.length > 0 ? preferences.watchProviders.length : 'None'} selected
-            </li>
-            <li>
-              <strong>Production Companies:</strong> {preferences.companies.length > 0 ? preferences.companies.length : 'None'} selected
-            </li>
-          </ul>
-        </div>
-      </form>
-    </div>
+          <div className="form-actions">
+            <button type="button" className="reset-button" onClick={handleReset}>
+              Reset Preferences
+            </button>
+            <button type="button" className="back-button" onClick={() => navigate('/')}>
+              Back to Search
+            </button>
+          </div>
+
+          <div className="preferences-info">
+            <h3>Your Selected Preferences</h3>
+            <ul>
+              <li className="summary-pair-row">
+                <div className="summary-pair">
+                  <span>
+                    <strong>Air Date (From):</strong> {formatOptionalValue(preferences.airDateGte)}
+                  </span>
+                  <span>
+                    <strong>Air Date (To):</strong> {formatOptionalValue(preferences.airDateLte)}
+                  </span>
+                </div>
+              </li>
+              <li className="summary-pair-row">
+                <div className="summary-pair">
+                  <span>
+                    <strong>Runtime (Min):</strong> {formatOptionalValue(preferences.episodeRuntimeGte)}
+                  </span>
+                  <span>
+                    <strong>Runtime (Max):</strong> {formatOptionalValue(preferences.episodeRuntimeLte)}
+                  </span>
+                </div>
+              </li>
+              <li className="summary-pair-row">
+                <div className="summary-pair">
+                  <span>
+                    <strong>Status:</strong> {formatSelectedValues(summaryLabels.status)}
+                  </span>
+                  <span>
+                    <strong>Type:</strong> {formatSelectedValues(summaryLabels.type)}
+                  </span>
+                </div>
+              </li>
+              <li className="summary-pair-row">
+                <div className="summary-pair">
+                  <span>
+                    <strong>Languages:</strong> {formatSelectedValues(summaryLabels.languages)}
+                  </span>
+                  <span>
+                    <strong>Countries:</strong> {formatSelectedValues(summaryLabels.countries)}
+                  </span>
+                </div>
+              </li>
+              <li className="summary-pair-row">
+                <div className={`summary-pair ${shouldStackProvidersAndCompanies ? 'summary-pair--stacked' : ''}`}>
+                  <span>
+                    <strong>Watch Providers:</strong> {watchProvidersText}
+                  </span>
+                  <span>
+                    <strong>Production Companies:</strong> {productionCompaniesText}
+                  </span>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </form>
+      </main>
+    </>
   )
 }
