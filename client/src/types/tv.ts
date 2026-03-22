@@ -54,6 +54,7 @@ export type TvPreferences = {
   episodeRuntimeGte?: number
   episodeRuntimeLte?: number
   originCountries: string[]
+  watchRegions: string[]
   originalLanguages: string[]
   companies: number[]
   status: number[]

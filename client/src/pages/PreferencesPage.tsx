@@ -4,8 +4,10 @@ import dayjs, { type Dayjs } from 'dayjs'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
+import VisibilityIcon from '@mui/icons-material/Visibility'
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
 import { useAuth } from '../context/AuthContext'
-import type { TvPreferences, WatchProvider, Company } from '../types/tv'
+import type { TvPreferences, WatchProvider, Company, TmdbTvResult } from '../types/tv'
 import { formatDateToDDMMYYYY } from '../utils/date'
 import '../TvSearch.css'
 import './PreferencesPage.css'
@@ -64,26 +66,43 @@ const COUNTRY_OPTIONS = [
   { code: 'IL', name: 'Israel' },
 ]
 
+const WATCH_REGION_OPTIONS = COUNTRY_OPTIONS.filter(
+  (country) => country.code === 'US' || country.code === 'IL',
+)
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api'
+const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w342'
+const DEFAULT_PREFERENCES: TvPreferences = {
+  originCountries: [],
+  watchRegions: [],
+  originalLanguages: [],
+  companies: [],
+  status: [],
+  type: [],
+  watchProviders: [],
+}
 
 export function PreferencesPage() {
   const { user, token, logout } = useAuth()
   const navigate = useNavigate()
   const [currentSlide, setCurrentSlide] = useState(0)
-  const [preferences, setPreferences] = useState<TvPreferences>({
-    originCountries: [],
-    originalLanguages: [],
-    companies: [],
-    status: [],
-    type: [],
-    watchProviders: [],
-  })
+  const [preferences, setPreferences] = useState<TvPreferences>(DEFAULT_PREFERENCES)
 
   const [watchProviders, setWatchProviders] = useState<WatchProvider[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
   const [loadingProviders, setLoadingProviders] = useState(true)
   const [loadingCompanies, setLoadingCompanies] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  
+  // Recommendations state
+  const [recommendations, setRecommendations] = useState<TmdbTvResult[]>([])
+  const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(false)
+  const [recommendationError, setRecommendationError] = useState<string | null>(null)
+  const [watchlistIds, setWatchlistIds] = useState<number[]>([])
+  const [watchedShowIds, setWatchedShowIds] = useState<number[]>([])
+  const [isAddingShowId, setIsAddingShowId] = useState<number | null>(null)
+  const [isRemovingShowId, setIsRemovingShowId] = useState<number | null>(null)
+  const [isMarkingWatchedShowId, setIsMarkingWatchedShowId] = useState<number | null>(null)
 
   const getDisplayNames = () => {
     const statusNames = preferences.status.map((id) => {
@@ -106,6 +125,11 @@ export function PreferencesPage() {
       return country ? `${code} (${country.name})` : code
     })
 
+    const watchRegionNames = preferences.watchRegions.map((code) => {
+      const country = COUNTRY_OPTIONS.find((c) => c.code === code)
+      return country ? `${code} (${country.name})` : code
+    })
+
     const providerNames = preferences.watchProviders.map((id) => {
       const provider = watchProviders.find((p) => p.provider_id === id)
       return provider ? `${id} (${provider.provider_name})` : id
@@ -121,6 +145,7 @@ export function PreferencesPage() {
       typeNames,
       languageNames,
       countryNames,
+      watchRegionNames,
       providerNames,
       companyNames,
     }
@@ -130,7 +155,18 @@ export function PreferencesPage() {
     const savedPreferences = localStorage.getItem('tv-preferences')
     if (savedPreferences) {
       try {
-        setPreferences(JSON.parse(savedPreferences))
+        const parsed = JSON.parse(savedPreferences) as Partial<TvPreferences>
+        setPreferences({
+          ...DEFAULT_PREFERENCES,
+          ...parsed,
+          originCountries: Array.isArray(parsed.originCountries) ? parsed.originCountries : [],
+          watchRegions: Array.isArray(parsed.watchRegions) ? parsed.watchRegions : [],
+          originalLanguages: Array.isArray(parsed.originalLanguages) ? parsed.originalLanguages : [],
+          companies: Array.isArray(parsed.companies) ? parsed.companies : [],
+          status: Array.isArray(parsed.status) ? parsed.status : [],
+          type: Array.isArray(parsed.type) ? parsed.type : [],
+          watchProviders: Array.isArray(parsed.watchProviders) ? parsed.watchProviders : [],
+        })
       } catch (e) {
         console.error('Failed to parse saved preferences:', e)
       }
@@ -206,6 +242,32 @@ export function PreferencesPage() {
   }, [token])
 
   useEffect(() => {
+    const fetchWatchlist = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/watchlist`, {
+          headers: {
+            accept: 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        })
+        if (response.ok) {
+          const data = await response.json()
+          if (Array.isArray(data)) {
+            setWatchlistIds(data.map((item: any) => item.tmdb_id))
+            setWatchedShowIds(data.filter((item: any) => item.watched).map((item: any) => item.tmdb_id))
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch watchlist:', err)
+      }
+    }
+
+    if (token) {
+      fetchWatchlist()
+    }
+  }, [token])
+
+  useEffect(() => {
     const displayNames = getDisplayNames()
 
     console.log('TV Preferences - API Ready Data:', {
@@ -228,6 +290,10 @@ export function PreferencesPage() {
       originCountries: {
         codes: preferences.originCountries,
         display: displayNames.countryNames,
+      },
+      watchRegions: {
+        codes: preferences.watchRegions,
+        display: displayNames.watchRegionNames,
       },
       watchProviders: {
         codes: preferences.watchProviders,
@@ -285,14 +351,7 @@ export function PreferencesPage() {
   }
 
   const handleReset = () => {
-    setPreferences({
-      originCountries: [],
-      originalLanguages: [],
-      companies: [],
-      status: [],
-      type: [],
-      watchProviders: [],
-    })
+    setPreferences(DEFAULT_PREFERENCES)
   }
 
   const formatSelectedValues = (values: Array<string | number>) => {
@@ -336,6 +395,10 @@ export function PreferencesPage() {
       .map((code) => COUNTRY_OPTIONS.find((item) => item.code === code)?.name)
       .filter((value): value is string => Boolean(value))
 
+    const watchRegions = preferences.watchRegions
+      .map((code) => COUNTRY_OPTIONS.find((item) => item.code === code)?.name)
+      .filter((value): value is string => Boolean(value))
+
     const watchProviderNames = preferences.watchProviders
       .map((id) => watchProviders.find((item) => item.provider_id === id)?.provider_name)
       .filter((value): value is string => Boolean(value))
@@ -349,9 +412,184 @@ export function PreferencesPage() {
       type,
       languages,
       countries,
+      watchRegions,
       watchProviderNames,
       companyNames,
     }
+  }
+
+  const handleAddToWatchlist = async (event: React.MouseEvent, show: TmdbTvResult) => {
+    event.stopPropagation()
+    setIsAddingShowId(show.id)
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/watchlist`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          tmdb_id: show.id,
+          name: show.name,
+          overview: show.overview,
+          poster_path: show.poster_path,
+          backdrop_path: show.backdrop_path,
+          first_air_date: show.first_air_date,
+          vote_average: show.vote_average,
+          vote_count: show.vote_count,
+          original_name: show.original_name,
+          original_language: show.original_language,
+          origin_country: show.origin_country,
+        }),
+      })
+
+      if (response.ok) {
+        setWatchlistIds((prev) => [...prev, show.id])
+      }
+    } catch (err) {
+      console.error('Failed to add to watchlist:', err)
+    } finally {
+      setIsAddingShowId(null)
+    }
+  }
+
+  const handleRemoveFromWatchlist = async (event: React.MouseEvent, showId: number) => {
+    event.stopPropagation()
+    setIsRemovingShowId(showId)
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/watchlist/${showId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (response.ok) {
+        setWatchlistIds((prev) => prev.filter((id) => id !== showId))
+        setWatchedShowIds((prev) => prev.filter((id) => id !== showId))
+      }
+    } catch (err) {
+      console.error('Failed to remove from watchlist:', err)
+    } finally {
+      setIsRemovingShowId(null)
+    }
+  }
+
+  const handleMarkAsWatched = async (event: React.MouseEvent, show: TmdbTvResult) => {
+    event.stopPropagation()
+    setIsMarkingWatchedShowId(show.id)
+
+    const newWatchedState = !watchedShowIds.includes(show.id)
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/watchlist/${show.id}/watched`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          watched: newWatchedState,
+          show: newWatchedState
+            ? undefined
+            : {
+                id: show.id,
+                name: show.name,
+                overview: show.overview,
+                poster_path: show.poster_path,
+                backdrop_path: show.backdrop_path,
+                first_air_date: show.first_air_date,
+                vote_average: show.vote_average,
+                vote_count: show.vote_count,
+                original_name: show.original_name,
+                original_language: show.original_language,
+                origin_country: show.origin_country,
+              },
+        }),
+      })
+
+      if (response.ok) {
+        if (newWatchedState) {
+          setWatchedShowIds((prev) => [...prev, show.id])
+        } else {
+          setWatchedShowIds((prev) => prev.filter((id) => id !== show.id))
+        }
+      }
+    } catch (err) {
+      console.error('Failed to mark as watched:', err)
+    } finally {
+      setIsMarkingWatchedShowId(null)
+    }
+  }
+
+  const handleRecommend = async () => {
+    setIsLoadingRecommendations(true)
+    setRecommendationError(null)
+
+    try {
+      // Build query parameters from preferences
+      const params = new URLSearchParams()
+
+      if (preferences.airDateGte) {
+        params.append('air_date_gte', preferences.airDateGte)
+      }
+      if (preferences.airDateLte) {
+        params.append('air_date_lte', preferences.airDateLte)
+      }
+      if (preferences.episodeRuntimeGte) {
+        params.append('with_runtime_gte', String(preferences.episodeRuntimeGte))
+      }
+      if (preferences.episodeRuntimeLte) {
+        params.append('with_runtime_lte', String(preferences.episodeRuntimeLte))
+      }
+      if (preferences.status.length > 0) {
+        params.append('with_status', preferences.status.join(','))
+      }
+      if (preferences.type.length > 0) {
+        params.append('with_type', preferences.type.join(','))
+      }
+      if (preferences.originalLanguages.length > 0) {
+        params.append('with_original_language', preferences.originalLanguages.join('|'))
+      }
+      if (preferences.originCountries.length > 0) {
+        params.append('with_origin_country', preferences.originCountries.join('|'))
+      }
+      if (preferences.watchProviders.length > 0) {
+        params.append('with_watch_providers', preferences.watchProviders.join('|'))
+        const selectedRegions = preferences.watchRegions
+          .map((region) => region.trim().toUpperCase())
+          .filter((region) => region.length === 2)
+        params.append('watch_region', selectedRegions.length > 0 ? selectedRegions.join('|') : 'US')
+      }
+      if (preferences.companies.length > 0) {
+        params.append('with_companies', preferences.companies.join('|'))
+      }
+
+      const response = await fetch(`${API_BASE_URL}/tv/discover?${params.toString()}`, {
+        headers: {
+          accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setRecommendations(data.results || [])
+      } else {
+        setRecommendationError('Failed to fetch recommendations')
+      }
+    } catch (err) {
+      console.error('Failed to fetch recommendations:', err)
+      setRecommendationError('Failed to fetch recommendations')
+    } finally {
+      setIsLoadingRecommendations(false)
+    }
+  }
+
+  const handleCardClick = (show: TmdbTvResult) => {
+    navigate(`/show/${show.id}`)
   }
 
   const slides: { key: string; title: string; content: ReactNode }[] = [
@@ -514,17 +752,38 @@ export function PreferencesPage() {
       content: loadingProviders ? (
         <p className="loading-text">Loading providers...</p>
       ) : (
-        <div className="checkbox-group">
-          {watchProviders.map((provider) => (
-            <label key={provider.provider_id} className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={(preferences.watchProviders as number[]).includes(provider.provider_id)}
-                onChange={(e) => handleMultiSelect('watchProviders', provider.provider_id, e.target.checked)}
-              />
-              <span>{provider.provider_name}</span>
-            </label>
-          ))}
+        <div className="combined-grid">
+          <div className="category-subsection">
+            <h3>Providers</h3>
+            <div className="checkbox-group">
+              {watchProviders.map((provider) => (
+                <label key={provider.provider_id} className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={(preferences.watchProviders as number[]).includes(provider.provider_id)}
+                    onChange={(e) => handleMultiSelect('watchProviders', provider.provider_id, e.target.checked)}
+                  />
+                  <span>{provider.provider_name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="category-subsection">
+            <h3>Watch Region (for providers)</h3>
+            <div className="checkbox-group">
+              {WATCH_REGION_OPTIONS.map((country) => (
+                <label key={`watch-region-${country.code}`} className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={(preferences.watchRegions as string[]).includes(country.code)}
+                    onChange={(e) => handleMultiSelect('watchRegions', country.code, e.target.checked)}
+                  />
+                  <span>{country.name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
         </div>
       ),
     },
@@ -650,8 +909,13 @@ export function PreferencesPage() {
             <button type="button" className="reset-button" onClick={handleReset}>
               Reset Preferences
             </button>
-            <button type="button" className="back-button" onClick={() => navigate('/')}>
-              Back to Search
+            <button 
+              type="button" 
+              className="back-button" 
+              onClick={handleRecommend}
+              disabled={isLoadingRecommendations}
+            >
+              {isLoadingRecommendations ? 'Loading recommendations...' : 'Get Recommendations'}
             </button>
           </div>
 
@@ -699,6 +963,13 @@ export function PreferencesPage() {
                 </div>
               </li>
               <li className="summary-pair-row">
+                <div className="summary-pair">
+                  <span>
+                    <strong>Watch Regions:</strong> {formatSelectedValues(summaryLabels.watchRegions)}
+                  </span>
+                </div>
+              </li>
+              <li className="summary-pair-row">
                 <div className={`summary-pair ${shouldStackProvidersAndCompanies ? 'summary-pair--stacked' : ''}`}>
                   <span>
                     <strong>Watch Providers:</strong> {watchProvidersText}
@@ -711,6 +982,87 @@ export function PreferencesPage() {
             </ul>
           </div>
         </form>
+
+        {recommendationError && <div className="error-message">{recommendationError}</div>}
+
+        {recommendations.length > 0 && (
+          <section className="recommendations-section">
+            <h2>Recommended Shows</h2>
+            <div className="results-grid" aria-live="polite">
+              {recommendations.map((show) => (
+                <article
+                  className="card"
+                  key={show.id}
+                  onClick={() => handleCardClick(show)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      handleCardClick(show)
+                    }
+                  }}
+                >
+                  {show.poster_path ? (
+                    <img
+                      src={`${TMDB_IMAGE_BASE}${show.poster_path}`}
+                      alt={`${show.name} poster`}
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="poster-fallback">No image</div>
+                  )}
+
+                  <div className="card-content">
+                    <h3>{show.name}</h3>
+                    <p className="meta">
+                      {formatDateToDDMMYYYY(show.first_air_date) || 'Unknown date'} • ⭐{' '}
+                      {show.vote_average.toFixed(1)}
+                    </p>
+                    <p className="overview">{show.overview || 'No overview available.'}</p>
+                    <div className="card-actions">
+                      <button
+                        className={`watchlist-btn ${watchlistIds.includes(show.id) ? 'watchlist-btn--remove' : ''}`}
+                        type="button"
+                        onClick={(event) =>
+                          watchlistIds.includes(show.id)
+                            ? handleRemoveFromWatchlist(event, show.id)
+                            : handleAddToWatchlist(event, show)
+                        }
+                        disabled={
+                          isAddingShowId === show.id ||
+                          isRemovingShowId === show.id ||
+                          isMarkingWatchedShowId === show.id
+                        }
+                      >
+                        {watchlistIds.includes(show.id)
+                          ? isRemovingShowId === show.id
+                            ? 'Removing...'
+                            : 'Remove from Watchlist'
+                          : isAddingShowId === show.id
+                            ? 'Adding...'
+                            : 'Add to Watchlist'}
+                      </button>
+                      <button
+                        className={`watch-eye-btn ${watchedShowIds.includes(show.id) ? 'watch-eye-btn--done' : ''}`}
+                        type="button"
+                        aria-label={watchedShowIds.includes(show.id) ? 'Mark as unwatched' : 'Mark as watched'}
+                        title={watchedShowIds.includes(show.id) ? 'Mark as unwatched' : 'Mark as watched'}
+                        onClick={(event) => handleMarkAsWatched(event, show)}
+                        disabled={
+                          isAddingShowId === show.id ||
+                          isRemovingShowId === show.id ||
+                          isMarkingWatchedShowId === show.id
+                        }
+                      >
+                        {watchedShowIds.includes(show.id) ? <VisibilityIcon /> : <VisibilityOutlinedIcon />}
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
       </main>
     </>
   )

@@ -1,6 +1,7 @@
 import { Controller, Get, Param, ParseIntPipe, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { SearchTvDto } from './dto/search-tv.dto';
+import { DiscoverTvDto } from './dto/discover-tv.dto';
 import { TvService } from './tv.service';
 
 @Controller('tv')
@@ -11,6 +12,11 @@ export class TvController {
   @Get('search')
   search(@Query() dto: SearchTvDto) {
     return this.tvService.search(dto.query);
+  }
+
+  @Get('discover')
+  discover(@Query() dto: DiscoverTvDto) {
+    return this.tvService.discover(dto);
   }
 
   @Get('providers/watch')
