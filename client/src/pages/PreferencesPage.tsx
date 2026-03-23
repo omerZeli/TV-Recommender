@@ -1,242 +1,34 @@
-﻿import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import type { FormEvent, MouseEvent } from 'react'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
 import { useAuth } from '../context/AuthContext'
-import type { TvPreferences, WatchProvider, Company, TmdbTvResult } from '../types/tv'
+import type { TmdbTvResult } from '../types/tv'
 import { formatDateToDDMMYYYY } from '../utils/date'
 import '../TvSearch.css'
-import './PreferencesPage.css'
-
-// Status codes from TMDB
-const STATUS_OPTIONS = [
-  { id: 0, name: 'Returning Series' },
-  { id: 1, name: 'Planned' },
-  { id: 2, name: 'In Production' },
-  { id: 3, name: 'Ended' },
-  { id: 4, name: 'Cancelled' },
-  { id: 5, name: 'Pilot' },
-]
-
-// Type codes from TMDB
-const TYPE_OPTIONS = [
-  { id: 0, name: 'Documentary' },
-  { id: 1, name: 'News' },
-  { id: 2, name: 'Miniseries' },
-  { id: 3, name: 'Reality' },
-  { id: 4, name: 'Scripted' },
-  { id: 5, name: 'Talk Show' },
-  { id: 6, name: 'Video' },
-]
-
-// Common languages
-const LANGUAGE_OPTIONS = [
-  { code: 'en', name: 'English' },
-  { code: 'es', name: 'Spanish' },
-  { code: 'fr', name: 'French' },
-  { code: 'de', name: 'German' },
-  { code: 'it', name: 'Italian' },
-  { code: 'ja', name: 'Japanese' },
-  { code: 'ko', name: 'Korean' },
-  { code: 'pt', name: 'Portuguese' },
-  { code: 'he', name: 'Hebrew' },
-  { code: 'zh', name: 'Chinese' },
-]
-
-// Common countries (ISO 3166-1)
-const COUNTRY_OPTIONS = [
-  { code: 'US', name: 'United States' },
-  { code: 'GB', name: 'United Kingdom' },
-  { code: 'CA', name: 'Canada' },
-  { code: 'AU', name: 'Australia' },
-  { code: 'FR', name: 'France' },
-  { code: 'DE', name: 'Germany' },
-  { code: 'IT', name: 'Italy' },
-  { code: 'ES', name: 'Spain' },
-  { code: 'JP', name: 'Japan' },
-  { code: 'KR', name: 'South Korea' },
-  { code: 'BR', name: 'Brazil' },
-  { code: 'MX', name: 'Mexico' },
-  { code: 'NZ', name: 'New Zealand' },
-  { code: 'SE', name: 'Sweden' },
-  { code: 'IL', name: 'Israel' },
-]
-
-const WATCH_REGION_OPTIONS = COUNTRY_OPTIONS.filter(
-  (country) => country.code === 'US' || country.code === 'IL',
-)
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api'
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w342'
-const DEFAULT_PREFERENCES: TvPreferences = {
-  originCountries: [],
-  watchRegions: [],
-  originalLanguages: [],
-  companies: [],
-  status: [],
-  type: [],
-  watchProviders: [],
-}
 
 export function PreferencesPage() {
   const { user, token, logout } = useAuth()
   const navigate = useNavigate()
-  const [currentSlide, setCurrentSlide] = useState(0)
-  const [preferences, setPreferences] = useState<TvPreferences>(DEFAULT_PREFERENCES)
 
-  const [watchProviders, setWatchProviders] = useState<WatchProvider[]>([])
-  const [companies, setCompanies] = useState<Company[]>([])
-  const [loadingProviders, setLoadingProviders] = useState(true)
-  const [loadingCompanies, setLoadingCompanies] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  
+  // Natural language search state
+  const [searchQuery, setSearchQuery] = useState('')
+  const [isLoadingSearch, setIsLoadingSearch] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
+
   // Recommendations state
   const [recommendations, setRecommendations] = useState<TmdbTvResult[]>([])
-  const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(false)
-  const [recommendationError, setRecommendationError] = useState<string | null>(null)
   const [watchlistIds, setWatchlistIds] = useState<number[]>([])
   const [watchedShowIds, setWatchedShowIds] = useState<number[]>([])
   const [isAddingShowId, setIsAddingShowId] = useState<number | null>(null)
   const [isRemovingShowId, setIsRemovingShowId] = useState<number | null>(null)
   const [isMarkingWatchedShowId, setIsMarkingWatchedShowId] = useState<number | null>(null)
 
-  const getDisplayNames = () => {
-    const statusNames = preferences.status.map((id) => {
-      const status = STATUS_OPTIONS.find((s) => s.id === id)
-      return status ? `${id} (${status.name})` : id
-    })
-
-    const typeNames = preferences.type.map((id) => {
-      const type = TYPE_OPTIONS.find((t) => t.id === id)
-      return type ? `${id} (${type.name})` : id
-    })
-
-    const languageNames = preferences.originalLanguages.map((code) => {
-      const lang = LANGUAGE_OPTIONS.find((l) => l.code === code)
-      return lang ? `${code} (${lang.name})` : code
-    })
-
-    const countryNames = preferences.originCountries.map((code) => {
-      const country = COUNTRY_OPTIONS.find((c) => c.code === code)
-      return country ? `${code} (${country.name})` : code
-    })
-
-    const watchRegionNames = preferences.watchRegions.map((code) => {
-      const country = COUNTRY_OPTIONS.find((c) => c.code === code)
-      return country ? `${code} (${country.name})` : code
-    })
-
-    const providerNames = preferences.watchProviders.map((id) => {
-      const provider = watchProviders.find((p) => p.provider_id === id)
-      return provider ? `${id} (${provider.provider_name})` : id
-    })
-
-    const companyNames = preferences.companies.map((id) => {
-      const company = companies.find((c) => c.id === id)
-      return company ? `${id} (${company.name})` : id
-    })
-
-    return {
-      statusNames,
-      typeNames,
-      languageNames,
-      countryNames,
-      watchRegionNames,
-      providerNames,
-      companyNames,
-    }
-  }
-
-  useEffect(() => {
-    const savedPreferences = localStorage.getItem('tv-preferences')
-    if (savedPreferences) {
-      try {
-        const parsed = JSON.parse(savedPreferences) as Partial<TvPreferences>
-        setPreferences({
-          ...DEFAULT_PREFERENCES,
-          ...parsed,
-          originCountries: Array.isArray(parsed.originCountries) ? parsed.originCountries : [],
-          watchRegions: Array.isArray(parsed.watchRegions) ? parsed.watchRegions : [],
-          originalLanguages: Array.isArray(parsed.originalLanguages) ? parsed.originalLanguages : [],
-          companies: Array.isArray(parsed.companies) ? parsed.companies : [],
-          status: Array.isArray(parsed.status) ? parsed.status : [],
-          type: Array.isArray(parsed.type) ? parsed.type : [],
-          watchProviders: Array.isArray(parsed.watchProviders) ? parsed.watchProviders : [],
-        })
-      } catch (e) {
-        console.error('Failed to parse saved preferences:', e)
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    localStorage.setItem('tv-preferences', JSON.stringify(preferences))
-  }, [preferences])
-
-  useEffect(() => {
-    const fetchWatchProviders = async () => {
-      try {
-        setLoadingProviders(true)
-        const response = await fetch(`${API_BASE_URL}/tv/providers/watch`, {
-          headers: {
-            accept: 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-        })
-        if (response.ok) {
-          const data = await response.json()
-          if (Array.isArray(data)) {
-            setWatchProviders(
-              data.slice(0, 20).map((provider: any) => ({
-                provider_id: provider.provider_id,
-                provider_name: provider.provider_name,
-                logo_path: provider.logo_path,
-              })),
-            )
-          }
-        }
-      } catch (err) {
-        console.error('Failed to fetch watch providers:', err)
-        setError('Failed to load watch providers')
-      } finally {
-        setLoadingProviders(false)
-      }
-    }
-
-    if (token) {
-      fetchWatchProviders()
-    }
-  }, [token])
-
-  useEffect(() => {
-    const fetchCompanies = async () => {
-      try {
-        setLoadingCompanies(true)
-        const response = await fetch(`${API_BASE_URL}/tv/companies/production`, {
-          headers: {
-            accept: 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-        })
-        if (response.ok) {
-          const data = await response.json()
-          if (Array.isArray(data)) {
-            setCompanies(data)
-          }
-        }
-      } catch (err) {
-        console.error('Failed to fetch companies:', err)
-        setError('Failed to load companies')
-      } finally {
-        setLoadingCompanies(false)
-      }
-    }
-
-    if (token) {
-      fetchCompanies()
-    }
-  }, [token])
-
+  // Fetch watchlist on load
   useEffect(() => {
     const fetchWatchlist = async () => {
       try {
@@ -263,145 +55,46 @@ export function PreferencesPage() {
     }
   }, [token])
 
-  useEffect(() => {
-    const displayNames = getDisplayNames()
+  const handleSearchWithNaturalLanguage = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
 
-    console.log('TV Preferences - API Ready Data:', {
-      airDateGte: preferences.airDateGte || 'Not set',
-      airDateLte: preferences.airDateLte || 'Not set',
-      episodeRuntimeGte: preferences.episodeRuntimeGte || 'Not set',
-      episodeRuntimeLte: preferences.episodeRuntimeLte || 'Not set',
-      status: {
-        codes: preferences.status,
-        display: displayNames.statusNames,
-      },
-      type: {
-        codes: preferences.type,
-        display: displayNames.typeNames,
-      },
-      originalLanguages: {
-        codes: preferences.originalLanguages,
-        display: displayNames.languageNames,
-      },
-      originCountries: {
-        codes: preferences.originCountries,
-        display: displayNames.countryNames,
-      },
-      watchRegions: {
-        codes: preferences.watchRegions,
-        display: displayNames.watchRegionNames,
-      },
-      watchProviders: {
-        codes: preferences.watchProviders,
-        display: displayNames.providerNames,
-      },
-      companies: {
-        codes: preferences.companies,
-        display: displayNames.companyNames,
-      },
-    })
-  }, [preferences, watchProviders, companies])
+    if (searchQuery.trim().length < 10) {
+      setSearchError('Please enter a search query with at least 10 characters')
+      return
+    }
 
-  const handleYearChange = (field: 'airDateGte' | 'airDateLte', value: string) => {
-    setPreferences((prev) => ({
-      ...prev,
-      [field]: value || undefined,
-    }))
-  }
+    setIsLoadingSearch(true)
+    setSearchError(null)
 
-  const handleRuntimeChange = (field: 'episodeRuntimeGte' | 'episodeRuntimeLte', value: string) => {
-    setPreferences((prev) => ({
-      ...prev,
-      [field]: value ? parseInt(value) : undefined,
-    }))
-  }
+    try {
+      const response = await fetch(`${API_BASE_URL}/tv/discover-natural`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          query: searchQuery,
+        }),
+      })
 
-  const handleMultiSelect = (field: keyof TvPreferences, value: string | number, checked: boolean) => {
-    setPreferences((prev) => {
-      const current = prev[field] as unknown[]
-      if (checked) {
-        return {
-          ...prev,
-          [field]: [...current, value],
-        }
+      if (response.ok) {
+        const data = await response.json()
+        setRecommendations(data.results || [])
+        console.log('Found', data.results?.length || 0, 'shows matching your natural language query')
+      } else {
+        setSearchError('Failed to process your search. Please try again with different wording.')
+        console.error('API response:', response.status, response.statusText)
       }
-
-      return {
-        ...prev,
-        [field]: current.filter((item) => item !== value),
-      }
-    })
-  }
-
-  const handleReset = () => {
-    setPreferences(DEFAULT_PREFERENCES)
-  }
-
-  const formatSelectedValues = (values: Array<string | number>) => {
-    if (values.length === 0) {
-      return 'Any'
-    }
-
-    return values.join(', ')
-  }
-
-  const formatOptionalValue = (value?: string | number) => {
-    if (value === undefined || value === null || value === '') {
-      return 'Any'
-    }
-
-    return String(value)
-  }
-
-  const formatOptionalYear = (value?: string) => {
-    if (!value) {
-      return 'Any'
-    }
-
-    return value
-  }
-
-  const getSummaryLabels = () => {
-    const status = preferences.status
-      .map((id) => STATUS_OPTIONS.find((item) => item.id === id)?.name)
-      .filter((value): value is string => Boolean(value))
-
-    const type = preferences.type
-      .map((id) => TYPE_OPTIONS.find((item) => item.id === id)?.name)
-      .filter((value): value is string => Boolean(value))
-
-    const languages = preferences.originalLanguages
-      .map((code) => LANGUAGE_OPTIONS.find((item) => item.code === code)?.name)
-      .filter((value): value is string => Boolean(value))
-
-    const countries = preferences.originCountries
-      .map((code) => COUNTRY_OPTIONS.find((item) => item.code === code)?.name)
-      .filter((value): value is string => Boolean(value))
-
-    const watchRegions = preferences.watchRegions
-      .map((code) => COUNTRY_OPTIONS.find((item) => item.code === code)?.name)
-      .filter((value): value is string => Boolean(value))
-
-    const watchProviderNames = preferences.watchProviders
-      .map((id) => watchProviders.find((item) => item.provider_id === id)?.provider_name)
-      .filter((value): value is string => Boolean(value))
-
-    const companyNames = preferences.companies
-      .map((id) => companies.find((item) => item.id === id)?.name)
-      .filter((value): value is string => Boolean(value))
-
-    return {
-      status,
-      type,
-      languages,
-      countries,
-      watchRegions,
-      watchProviderNames,
-      companyNames,
+    } catch (err) {
+      console.error('Failed to fetch recommendations:', err)
+      setSearchError('An error occurred while processing your search.')
+    } finally {
+      setIsLoadingSearch(false)
     }
   }
 
-  const handleAddToWatchlist = async (event: React.MouseEvent, show: TmdbTvResult) => {
+  const handleAddToWatchlist = async (event: MouseEvent<HTMLButtonElement>, show: TmdbTvResult) => {
     event.stopPropagation()
     setIsAddingShowId(show.id)
 
@@ -413,7 +106,7 @@ export function PreferencesPage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          tmdb_id: show.id,
+          id: show.id,
           name: show.name,
           overview: show.overview,
           poster_path: show.poster_path,
@@ -437,7 +130,7 @@ export function PreferencesPage() {
     }
   }
 
-  const handleRemoveFromWatchlist = async (event: React.MouseEvent, showId: number) => {
+  const handleRemoveFromWatchlist = async (event: MouseEvent<HTMLButtonElement>, showId: number) => {
     event.stopPropagation()
     setIsRemovingShowId(showId)
 
@@ -460,7 +153,7 @@ export function PreferencesPage() {
     }
   }
 
-  const handleMarkAsWatched = async (event: React.MouseEvent, show: TmdbTvResult) => {
+  const handleMarkAsWatched = async (event: MouseEvent<HTMLButtonElement>, show: TmdbTvResult) => {
     event.stopPropagation()
     setIsMarkingWatchedShowId(show.id)
 
@@ -507,310 +200,8 @@ export function PreferencesPage() {
     }
   }
 
-  const handleRecommend = async () => {
-    setIsLoadingRecommendations(true)
-    setRecommendationError(null)
-
-    try {
-      // Build query parameters from preferences
-      const params = new URLSearchParams()
-
-      if (preferences.airDateGte) {
-        params.append('air_date_gte', `${preferences.airDateGte}-01-01`)
-      }
-      if (preferences.airDateLte) {
-        params.append('air_date_lte', `${preferences.airDateLte}-12-31`)
-      }
-      if (preferences.episodeRuntimeGte) {
-        params.append('with_runtime_gte', String(preferences.episodeRuntimeGte))
-      }
-      if (preferences.episodeRuntimeLte) {
-        params.append('with_runtime_lte', String(preferences.episodeRuntimeLte))
-      }
-      if (preferences.status.length > 0) {
-        params.append('with_status', preferences.status.join(','))
-      }
-      if (preferences.type.length > 0) {
-        params.append('with_type', preferences.type.join(','))
-      }
-      if (preferences.originalLanguages.length > 0) {
-        params.append('with_original_language', preferences.originalLanguages.join('|'))
-      }
-      if (preferences.originCountries.length > 0) {
-        params.append('with_origin_country', preferences.originCountries.join('|'))
-      }
-      if (preferences.watchProviders.length > 0) {
-        params.append('with_watch_providers', preferences.watchProviders.join('|'))
-        const selectedRegions = preferences.watchRegions
-          .map((region) => region.trim().toUpperCase())
-          .filter((region) => region.length === 2)
-        params.append('watch_region', selectedRegions.length > 0 ? selectedRegions.join('|') : 'US')
-      }
-      if (preferences.companies.length > 0) {
-        params.append('with_companies', preferences.companies.join('|'))
-      }
-
-      const fullUrl = `${API_BASE_URL}/tv/discover?${params.toString()}`
-      console.log('Fetching recommendations with URL:', fullUrl)
-      console.log('Air date range - From:', preferences.airDateGte, 'To:', preferences.airDateLte)
-      
-      const response = await fetch(fullUrl, {
-        headers: {
-          accept: 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setRecommendations(data.results || [])
-      } else {
-        setRecommendationError('Failed to fetch recommendations')
-      }
-    } catch (err) {
-      console.error('Failed to fetch recommendations:', err)
-      setRecommendationError('Failed to fetch recommendations')
-    } finally {
-      setIsLoadingRecommendations(false)
-    }
-  }
-
   const handleCardClick = (show: TmdbTvResult) => {
-    navigate(`/show/${show.id}`)
-  }
-
-  const slides: { key: string; title: string; content: ReactNode }[] = [
-    {
-      key: 'air-date-runtime',
-      title: 'Air Date Range and Episode Runtime',
-      content: (
-        <div className="combined-grid">
-          <div className="category-subsection">
-            <h3>Air Date Range</h3>
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="airDateGte">From Year</label>
-                <input
-                  id="airDateGte"
-                  type="number"
-                  min="1900"
-                  max="2100"
-                  value={preferences.airDateGte || ''}
-                  onChange={(e) => handleYearChange('airDateGte', e.target.value)}
-                  placeholder="YYYY"
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="airDateLte">To Year</label>
-                <input
-                  id="airDateLte"
-                  type="number"
-                  min="1900"
-                  max="2100"
-                  value={preferences.airDateLte || ''}
-                  onChange={(e) => handleYearChange('airDateLte', e.target.value)}
-                  placeholder="YYYY"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="category-subsection">
-            <h3>Episode Runtime (minutes)</h3>
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="episodeRuntimeGte">Minimum</label>
-                <input
-                  id="episodeRuntimeGte"
-                  type="number"
-                  min="0"
-                  max="200"
-                  value={preferences.episodeRuntimeGte || ''}
-                  onChange={(e) => handleRuntimeChange('episodeRuntimeGte', e.target.value)}
-                  placeholder="0"
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="episodeRuntimeLte">Maximum</label>
-                <input
-                  id="episodeRuntimeLte"
-                  type="number"
-                  min="0"
-                  max="200"
-                  value={preferences.episodeRuntimeLte || ''}
-                  onChange={(e) => handleRuntimeChange('episodeRuntimeLte', e.target.value)}
-                  placeholder="200"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: 'status-type',
-      title: 'Status and Type',
-      content: (
-        <div className="combined-grid">
-          <div className="category-subsection">
-            <h3>Status</h3>
-            <div className="checkbox-group">
-              {STATUS_OPTIONS.map((status) => (
-                <label key={status.id} className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={(preferences.status as number[]).includes(status.id)}
-                    onChange={(e) => handleMultiSelect('status', status.id, e.target.checked)}
-                  />
-                  <span>{status.name}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="category-subsection">
-            <h3>Type</h3>
-            <div className="checkbox-group">
-              {TYPE_OPTIONS.map((type) => (
-                <label key={type.id} className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={(preferences.type as number[]).includes(type.id)}
-                    onChange={(e) => handleMultiSelect('type', type.id, e.target.checked)}
-                  />
-                  <span>{type.name}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: 'language-country',
-      title: 'Original Language and Origin Country',
-      content: (
-        <div className="combined-grid">
-          <div className="category-subsection">
-            <h3>Original Language</h3>
-            <div className="checkbox-group">
-              {LANGUAGE_OPTIONS.map((lang) => (
-                <label key={lang.code} className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={(preferences.originalLanguages as string[]).includes(lang.code)}
-                    onChange={(e) => handleMultiSelect('originalLanguages', lang.code, e.target.checked)}
-                  />
-                  <span>{lang.name}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="category-subsection">
-            <h3>Origin Country</h3>
-            <div className="checkbox-group">
-              {COUNTRY_OPTIONS.map((country) => (
-                <label key={country.code} className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={(preferences.originCountries as string[]).includes(country.code)}
-                    onChange={(e) => handleMultiSelect('originCountries', country.code, e.target.checked)}
-                  />
-                  <span>{country.name}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: 'providers',
-      title: 'Watch Providers',
-      content: loadingProviders ? (
-        <p className="loading-text">Loading providers...</p>
-      ) : (
-        <div className="combined-grid">
-          <div className="category-subsection">
-            <h3>Providers</h3>
-            <div className="checkbox-group">
-              {watchProviders.map((provider) => (
-                <label key={provider.provider_id} className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={(preferences.watchProviders as number[]).includes(provider.provider_id)}
-                    onChange={(e) => handleMultiSelect('watchProviders', provider.provider_id, e.target.checked)}
-                  />
-                  <span>{provider.provider_name}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="category-subsection">
-            <h3>Watch Region (for providers)</h3>
-            <div className="checkbox-group">
-              {WATCH_REGION_OPTIONS.map((country) => (
-                <label key={`watch-region-${country.code}`} className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={(preferences.watchRegions as string[]).includes(country.code)}
-                    onChange={(e) => handleMultiSelect('watchRegions', country.code, e.target.checked)}
-                  />
-                  <span>{country.name}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: 'companies',
-      title: 'Production Companies',
-      content: loadingCompanies ? (
-        <p className="loading-text">Loading companies...</p>
-      ) : (
-        <div className="checkbox-group">
-          {companies.map((company) => (
-            <label key={company.id} className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={(preferences.companies as number[]).includes(company.id)}
-                onChange={(e) => handleMultiSelect('companies', company.id, e.target.checked)}
-              />
-              <span>{company.name}</span>
-            </label>
-          ))}
-        </div>
-      ),
-    },
-  ]
-
-  const summaryLabels = getSummaryLabels()
-  const watchProvidersText = formatSelectedValues(summaryLabels.watchProviderNames)
-  const productionCompaniesText = formatSelectedValues(summaryLabels.companyNames)
-  const shouldStackProvidersAndCompanies =
-    watchProvidersText.length > 90 || productionCompaniesText.length > 90
-  const isFirstSlide = currentSlide === 0
-  const isLastSlide = currentSlide === slides.length - 1
-
-  const goToPreviousSlide = () => {
-    if (!isFirstSlide) {
-      setCurrentSlide((prev) => prev - 1)
-    }
-  }
-
-  const goToNextSlide = () => {
-    if (!isLastSlide) {
-      setCurrentSlide((prev) => prev + 1)
-    }
-  }
-
-  if (!token) {
-    navigate('/login')
-    return null
+    navigate(`/show/${show.id}`, { state: { show } })
   }
 
   return (
@@ -842,141 +233,44 @@ export function PreferencesPage() {
         </div>
       </header>
 
-      <main className="app preferences-page">
+      <main className="app">
         <header className="hero">
-          <h2>TV Show Preferences</h2>
-          <p>Customize your TV show recommendation preferences</p>
+          <h2>Describe Your TV Preferences</h2>
+          <p>Use natural language and we will find matching shows.</p>
         </header>
 
-        {error && <div className="error-message">{error}</div>}
-
-        <form className="preferences-form">
-          <div className="category-slider">
-            <div className="slider-track" style={{ transform: `translateX(-${currentSlide * 100}%)` }}>
-              {slides.map((slide) => (
-                <div key={slide.key} className="form-section slider-slide">
-                  <h2>{slide.title}</h2>
-                  {slide.content}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="slider-controls">
-            <button type="button" className="slider-button" onClick={goToPreviousSlide} disabled={isFirstSlide}>
-              Previous
-            </button>
-
-            <div className="slider-dots" aria-label="Preference categories">
-              {slides.map((slide, index) => (
-                <button
-                  key={slide.key}
-                  type="button"
-                  className={`slider-dot ${index === currentSlide ? 'active' : ''}`}
-                  onClick={() => setCurrentSlide(index)}
-                  aria-label={`Go to ${slide.title}`}
-                />
-              ))}
-            </div>
-
-            <button type="button" className="slider-button" onClick={goToNextSlide} disabled={isLastSlide}>
-              Next
-            </button>
-          </div>
-
-          <div className="form-actions">
-            <button type="button" className="reset-button" onClick={handleReset}>
-              Reset Preferences
-            </button>
-            <button 
-              type="button" 
-              className="back-button" 
-              onClick={handleRecommend}
-              disabled={isLoadingRecommendations}
-            >
-              {isLoadingRecommendations ? 'Loading recommendations...' : 'Get Recommendations'}
-            </button>
-          </div>
-
-          <div className="preferences-info">
-            <h3>Your Selected Preferences</h3>
-            <ul>
-              <li className="summary-pair-row">
-                <div className="summary-pair">
-                  <span>
-                    <strong>Air Date (From):</strong> {formatOptionalYear(preferences.airDateGte)}
-                  </span>
-                  <span>
-                    <strong>Air Date (To):</strong> {formatOptionalYear(preferences.airDateLte)}
-                  </span>
-                </div>
-              </li>
-              <li className="summary-pair-row">
-                <div className="summary-pair">
-                  <span>
-                    <strong>Runtime (Min):</strong> {formatOptionalValue(preferences.episodeRuntimeGte)}
-                  </span>
-                  <span>
-                    <strong>Runtime (Max):</strong> {formatOptionalValue(preferences.episodeRuntimeLte)}
-                  </span>
-                </div>
-              </li>
-              <li className="summary-pair-row">
-                <div className="summary-pair">
-                  <span>
-                    <strong>Status:</strong> {formatSelectedValues(summaryLabels.status)}
-                  </span>
-                  <span>
-                    <strong>Type:</strong> {formatSelectedValues(summaryLabels.type)}
-                  </span>
-                </div>
-              </li>
-              <li className="summary-pair-row">
-                <div className="summary-pair">
-                  <span>
-                    <strong>Languages:</strong> {formatSelectedValues(summaryLabels.languages)}
-                  </span>
-                  <span>
-                    <strong>Countries:</strong> {formatSelectedValues(summaryLabels.countries)}
-                  </span>
-                </div>
-              </li>
-              <li className="summary-pair-row">
-                <div className="summary-pair">
-                  <span>
-                    <strong>Watch Regions:</strong> {formatSelectedValues(summaryLabels.watchRegions)}
-                  </span>
-                </div>
-              </li>
-              <li className="summary-pair-row">
-                <div className={`summary-pair ${shouldStackProvidersAndCompanies ? 'summary-pair--stacked' : ''}`}>
-                  <span>
-                    <strong>Watch Providers:</strong> {watchProvidersText}
-                  </span>
-                  <span>
-                    <strong>Production Companies:</strong> {productionCompaniesText}
-                  </span>
-                </div>
-              </li>
-            </ul>
-          </div>
+        <form className="search-bar" onSubmit={handleSearchWithNaturalLanguage}>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Example: gripping drama on HBO Max or Netflix, no gore"
+            aria-label="Natural language TV preferences"
+          />
+          <button type="submit" disabled={isLoadingSearch}>
+            {isLoadingSearch ? 'Searching...' : 'Search'}
+          </button>
         </form>
 
-        {recommendationError && <div className="error-message">{recommendationError}</div>}
+        {searchError && <p className="error">{searchError}</p>}
+
+        {searchQuery.trim() && !searchError && (
+          <p className="results-meta">Showing results for "{searchQuery.trim()}"</p>
+        )}
 
         {recommendations.length > 0 && (
-          <section className="recommendations-section">
-            <h2>Recommended Shows</h2>
+          <section className="results-section">
+            <p className="results-meta">Found {recommendations.length} shows</p>
             <div className="results-grid" aria-live="polite">
               {recommendations.map((show) => (
                 <article
-                  className="card"
                   key={show.id}
+                  className="card"
                   onClick={() => handleCardClick(show)}
                   role="button"
                   tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
                       handleCardClick(show)
                     }
                   }}
@@ -992,55 +286,58 @@ export function PreferencesPage() {
                   )}
 
                   <div className="card-content">
-                    <h3>{show.name}</h3>
+                    <h2>{show.name}</h2>
                     <p className="meta">
                       {formatDateToDDMMYYYY(show.first_air_date) || 'Unknown date'} • ⭐{' '}
                       {show.vote_average.toFixed(1)}
                     </p>
                     <p className="overview">{show.overview || 'No overview available.'}</p>
                     <div className="card-actions">
+                    {watchlistIds.includes(show.id) ? (
+                      <>
+                        <button
+                          onClick={(e) => handleRemoveFromWatchlist(e, show.id)}
+                          disabled={isRemovingShowId === show.id || isMarkingWatchedShowId === show.id}
+                          className="watchlist-btn watchlist-btn--remove"
+                          type="button"
+                        >
+                          {isRemovingShowId === show.id ? 'Removing...' : 'Remove from Watchlist'}
+                        </button>
+                        <button
+                          onClick={(e) => handleMarkAsWatched(e, show)}
+                          disabled={isRemovingShowId === show.id || isMarkingWatchedShowId === show.id}
+                          className={`watch-eye-btn ${watchedShowIds.includes(show.id) ? 'watch-eye-btn--done' : ''}`}
+                          type="button"
+                          aria-label={watchedShowIds.includes(show.id) ? 'Mark as unwatched' : 'Mark as watched'}
+                          title={watchedShowIds.includes(show.id) ? 'Mark as unwatched' : 'Mark as watched'}
+                        >
+                          {isMarkingWatchedShowId === show.id
+                            ? '...'
+                            : watchedShowIds.includes(show.id)
+                              ? <VisibilityIcon fontSize="small" />
+                              : <VisibilityOutlinedIcon fontSize="small" />}
+                        </button>
+                      </>
+                    ) : (
                       <button
-                        className={`watchlist-btn ${watchlistIds.includes(show.id) ? 'watchlist-btn--remove' : ''}`}
+                        onClick={(e) => handleAddToWatchlist(e, show)}
+                        disabled={isAddingShowId === show.id || isMarkingWatchedShowId === show.id}
+                        className="watchlist-btn"
                         type="button"
-                        onClick={(event) =>
-                          watchlistIds.includes(show.id)
-                            ? handleRemoveFromWatchlist(event, show.id)
-                            : handleAddToWatchlist(event, show)
-                        }
-                        disabled={
-                          isAddingShowId === show.id ||
-                          isRemovingShowId === show.id ||
-                          isMarkingWatchedShowId === show.id
-                        }
                       >
-                        {watchlistIds.includes(show.id)
-                          ? isRemovingShowId === show.id
-                            ? 'Removing...'
-                            : 'Remove from Watchlist'
-                          : isAddingShowId === show.id
-                            ? 'Adding...'
-                            : 'Add to Watchlist'}
+                        {isAddingShowId === show.id ? 'Adding...' : 'Add to Watchlist'}
                       </button>
-                      <button
-                        className={`watch-eye-btn ${watchedShowIds.includes(show.id) ? 'watch-eye-btn--done' : ''}`}
-                        type="button"
-                        aria-label={watchedShowIds.includes(show.id) ? 'Mark as unwatched' : 'Mark as watched'}
-                        title={watchedShowIds.includes(show.id) ? 'Mark as unwatched' : 'Mark as watched'}
-                        onClick={(event) => handleMarkAsWatched(event, show)}
-                        disabled={
-                          isAddingShowId === show.id ||
-                          isRemovingShowId === show.id ||
-                          isMarkingWatchedShowId === show.id
-                        }
-                      >
-                        {watchedShowIds.includes(show.id) ? <VisibilityIcon /> : <VisibilityOutlinedIcon />}
-                      </button>
+                    )}
                     </div>
                   </div>
                 </article>
               ))}
             </div>
           </section>
+        )}
+
+        {!isLoadingSearch && recommendations.length === 0 && searchQuery.trim() && !searchError && (
+          <p className="results-meta">No shows found. Try refining your search.</p>
         )}
       </main>
     </>

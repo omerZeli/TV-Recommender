@@ -251,6 +251,9 @@ export class TvService {
       ),
     );
 
+    console.log('[TMDB discover] Final params JSON:', Object.fromEntries(searchParams.entries()));
+    console.log('[TMDB discover] Query string:', searchParams.toString());
+
     if (hasWatchProviders && watchRegions.length > 1) {
       const mergedResults = new Map<number, any>();
       let maxTotalPages = 0;
@@ -258,6 +261,11 @@ export class TvService {
       for (const region of watchRegions) {
         const regionParams = new URLSearchParams(searchParams);
         regionParams.set('watch_region', region);
+
+        console.log(
+          `[TMDB discover] Region-specific params (${region}):`,
+          Object.fromEntries(regionParams.entries()),
+        );
 
         const regionResponse = await fetch(
           `https://api.themoviedb.org/3/discover/tv?${regionParams.toString()}`,
