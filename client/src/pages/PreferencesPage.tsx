@@ -1,9 +1,5 @@
 ﻿import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import dayjs, { type Dayjs } from 'dayjs'
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
-import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
 import { useAuth } from '../context/AuthContext'
@@ -271,8 +267,8 @@ export function PreferencesPage() {
     const displayNames = getDisplayNames()
 
     console.log('TV Preferences - API Ready Data:', {
-      airDateGte: formatDateToDDMMYYYY(preferences.airDateGte) || 'Not set',
-      airDateLte: formatDateToDDMMYYYY(preferences.airDateLte) || 'Not set',
+      airDateGte: preferences.airDateGte || 'Not set',
+      airDateLte: preferences.airDateLte || 'Not set',
       episodeRuntimeGte: preferences.episodeRuntimeGte || 'Not set',
       episodeRuntimeLte: preferences.episodeRuntimeLte || 'Not set',
       status: {
@@ -306,24 +302,11 @@ export function PreferencesPage() {
     })
   }, [preferences, watchProviders, companies])
 
-  const handleDateChange = (field: 'airDateGte' | 'airDateLte', value: string) => {
+  const handleYearChange = (field: 'airDateGte' | 'airDateLte', value: string) => {
     setPreferences((prev) => ({
       ...prev,
       [field]: value || undefined,
     }))
-  }
-
-  const getDatePickerValue = (value?: string): Dayjs | null => {
-    if (!value) {
-      return null
-    }
-
-    const parsed = dayjs(value)
-    return parsed.isValid() ? parsed : null
-  }
-
-  const handleDatePickerChange = (field: 'airDateGte' | 'airDateLte', value: Dayjs | null) => {
-    handleDateChange(field, value ? value.format('YYYY-MM-DD') : '')
   }
 
   const handleRuntimeChange = (field: 'episodeRuntimeGte' | 'episodeRuntimeLte', value: string) => {
@@ -370,12 +353,12 @@ export function PreferencesPage() {
     return String(value)
   }
 
-  const formatOptionalDate = (value?: string) => {
+  const formatOptionalYear = (value?: string) => {
     if (!value) {
       return 'Any'
     }
 
-    return formatDateToDDMMYYYY(value) || 'Any'
+    return value
   }
 
   const getSummaryLabels = () => {
@@ -533,10 +516,10 @@ export function PreferencesPage() {
       const params = new URLSearchParams()
 
       if (preferences.airDateGte) {
-        params.append('air_date_gte', preferences.airDateGte)
+        params.append('air_date_gte', `${preferences.airDateGte}-01-01`)
       }
       if (preferences.airDateLte) {
-        params.append('air_date_lte', preferences.airDateLte)
+        params.append('air_date_lte', `${preferences.airDateLte}-12-31`)
       }
       if (preferences.episodeRuntimeGte) {
         params.append('with_runtime_gte', String(preferences.episodeRuntimeGte))
@@ -567,7 +550,11 @@ export function PreferencesPage() {
         params.append('with_companies', preferences.companies.join('|'))
       }
 
-      const response = await fetch(`${API_BASE_URL}/tv/discover?${params.toString()}`, {
+      const fullUrl = `${API_BASE_URL}/tv/discover?${params.toString()}`
+      console.log('Fetching recommendations with URL:', fullUrl)
+      console.log('Air date range - From:', preferences.airDateGte, 'To:', preferences.airDateLte)
+      
+      const response = await fetch(fullUrl, {
         headers: {
           accept: 'application/json',
           Authorization: `Bearer ${token}`,
@@ -601,38 +588,30 @@ export function PreferencesPage() {
           <div className="category-subsection">
             <h3>Air Date Range</h3>
             <div className="form-row">
-              <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="en-gb">
-                <div className="form-group">
-                  <label htmlFor="airDateGte">From Date</label>
-                  <DatePicker
-                    value={getDatePickerValue(preferences.airDateGte)}
-                    format="DD/MM/YYYY"
-                    onChange={(value) => handleDatePickerChange('airDateGte', value)}
-                    slotProps={{
-                      textField: {
-                        id: 'airDateGte',
-                        placeholder: 'DD/MM/YYYY',
-                        fullWidth: true,
-                      },
-                    }}
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="airDateLte">To Date</label>
-                  <DatePicker
-                    value={getDatePickerValue(preferences.airDateLte)}
-                    format="DD/MM/YYYY"
-                    onChange={(value) => handleDatePickerChange('airDateLte', value)}
-                    slotProps={{
-                      textField: {
-                        id: 'airDateLte',
-                        placeholder: 'DD/MM/YYYY',
-                        fullWidth: true,
-                      },
-                    }}
-                  />
-                </div>
-              </LocalizationProvider>
+              <div className="form-group">
+                <label htmlFor="airDateGte">From Year</label>
+                <input
+                  id="airDateGte"
+                  type="number"
+                  min="1900"
+                  max="2100"
+                  value={preferences.airDateGte || ''}
+                  onChange={(e) => handleYearChange('airDateGte', e.target.value)}
+                  placeholder="YYYY"
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="airDateLte">To Year</label>
+                <input
+                  id="airDateLte"
+                  type="number"
+                  min="1900"
+                  max="2100"
+                  value={preferences.airDateLte || ''}
+                  onChange={(e) => handleYearChange('airDateLte', e.target.value)}
+                  placeholder="YYYY"
+                />
+              </div>
             </div>
           </div>
 
@@ -925,10 +904,10 @@ export function PreferencesPage() {
               <li className="summary-pair-row">
                 <div className="summary-pair">
                   <span>
-                    <strong>Air Date (From):</strong> {formatOptionalDate(preferences.airDateGte)}
+                    <strong>Air Date (From):</strong> {formatOptionalYear(preferences.airDateGte)}
                   </span>
                   <span>
-                    <strong>Air Date (To):</strong> {formatOptionalDate(preferences.airDateLte)}
+                    <strong>Air Date (To):</strong> {formatOptionalYear(preferences.airDateLte)}
                   </span>
                 </div>
               </li>
