@@ -251,8 +251,10 @@ export class TvService {
       ),
     );
 
-    console.log('[TMDB discover] Final params JSON:', Object.fromEntries(searchParams.entries()));
-    console.log('[TMDB discover] Query string:', searchParams.toString());
+    const requestId = searchParams.get('_request_id');
+    const logPrefix = requestId ? `[TMDB discover ${requestId}]` : '[TMDB discover]';
+    console.log(logPrefix + ' Final params JSON:', Object.fromEntries(searchParams.entries()));
+    console.log(logPrefix + ' Query string:', searchParams.toString());
 
     if (hasWatchProviders && watchRegions.length > 1) {
       const mergedResults = new Map<number, any>();

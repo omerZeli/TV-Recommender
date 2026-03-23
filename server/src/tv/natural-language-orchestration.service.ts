@@ -48,6 +48,130 @@ export class NaturalLanguageOrchestrationService {
     return this.configService.get<string>('GROQ_MODEL', 'llama-3.3-70b-versatile');
   }
 
+  private tokenizeText(value: string): string[] {
+    return value
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .map((token) => token.trim())
+      .filter((token) => token.length > 0);
+  }
+
+  private parseAndOrGroups(raw: string): string[][] {
+    return raw
+      .split(',')
+      .map((andGroup) =>
+        andGroup
+          .split('|')
+          .map((entry) => entry.trim())
+          .filter((entry) => entry.length > 0),
+      )
+      .filter((group) => group.length > 0);
+  }
+
+  private rankKeywordMatch(searchTerm: string, candidateName: string): number {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    const normalizedCandidate = candidateName.trim().toLowerCase();
+
+    if (normalizedSearch === normalizedCandidate) {
+      return 1000;
+    }
+
+    let score = 0;
+
+    if (
+      normalizedCandidate.includes(normalizedSearch) ||
+      normalizedSearch.includes(normalizedCandidate)
+    ) {
+      score += 120;
+    }
+
+    const searchTokens = this.tokenizeText(normalizedSearch);
+    const candidateTokens = new Set(this.tokenizeText(normalizedCandidate));
+    const overlap = searchTokens.filter((token) => candidateTokens.has(token)).length;
+
+    score += overlap * 25;
+    return score;
+  }
+
+  private normalizeKeywordExpression(raw: string): string | undefined {
+    const cleaned = raw
+      .replace(/\s*\|\s*/g, '|')
+      .replace(/\s*,\s*/g, ',')
+      .replace(/[|,]{2,}/g, '|')
+      .replace(/^[|,]+|[|,]+$/g, '')
+      .trim();
+
+    return cleaned.length > 0 ? cleaned : undefined;
+  }
+
+  async expandKeywordsForRecall(
+    query: string,
+    originalWithKeywords: string,
+    currentCount: number,
+    targetCount: number,
+  ): Promise<string | undefined> {
+    const groqApiKey = this.getGroqApiKey();
+    const groqModel = this.getGroqModel();
+
+    const systemPrompt = `You expand TMDB TV discover keyword filters for higher recall.
+Return ONLY valid JSON: {"with_keywords":"..."}
+
+Rules:
+- Keep the same intent as the original keywords.
+- Add semantic alternatives/siblings the user did not explicitly write (e.g. money -> wealth|business|finance|investor).
+- Use TMDB-style keyword expression syntax where comma means AND and pipe means OR.
+- If current results are low (< target), prefer wider recall.
+- If current results are 0, strongly prefer OR behavior across concepts to avoid over-constrained AND.
+- Limit to 6 to 14 total keyword terms.
+- Do not output explanations, markdown, or extra fields.`;
+
+    const userMessage = `User query: "${query}"
+Original with_keywords: "${originalWithKeywords}"
+Current results count: ${currentCount}
+Target results count: ${targetCount}
+
+Generate a broader with_keywords expression.`;
+
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${groqApiKey}`,
+        },
+        body: JSON.stringify({
+          model: groqModel,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage },
+          ],
+          temperature: 0.2,
+          max_tokens: 180,
+        }),
+      });
+
+      if (!response.ok) {
+        return undefined;
+      }
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content;
+      if (!content) {
+        return undefined;
+      }
+
+      const parsed = JSON.parse(content.trim()) as { with_keywords?: string };
+      if (!parsed.with_keywords) {
+        return undefined;
+      }
+
+      return this.normalizeKeywordExpression(parsed.with_keywords);
+    } catch (error) {
+      console.error('Failed to expand keywords with LLM:', error);
+      return undefined;
+    }
+  }
+
   /**
    * Calls Groq API to parse natural language and extract TV show parameters
    * Returns a JSON-parseable string with discovered parameters
@@ -62,18 +186,18 @@ Return ONLY valid JSON (no markdown, no code blocks). All fields are optional â€
 
 Available fields:
 {
-  "with_genres":                  "comma-separated genre names, e.g. 'Drama,Thriller'",
-  "without_genres":               "comma-separated genre names to exclude",
-  "with_networks":                "comma-separated broadcast network names, e.g. 'HBO,AMC' (not streaming services)",
-  "with_companies":               "comma-separated production company names, e.g. 'BBC,A24'",
-  "without_companies":            "comma-separated production company names to exclude",
-  "with_watch_providers":         "comma-separated streaming service names, e.g. 'Netflix,Prime Video,Disney Plus'",
-  "without_watch_providers":      "comma-separated streaming services to exclude",
+  "with_genres":                  "genre names; use comma for AND, pipe for OR",
+  "without_genres":               "excluded genre names; use comma for AND, pipe for OR",
+  "with_networks":                "broadcast network names (not streaming); use comma for AND, pipe for OR",
+  "with_companies":               "production company names; use comma for AND, pipe for OR",
+  "without_companies":            "excluded production company names; use comma for AND, pipe for OR",
+  "with_watch_providers":         "streaming service names; use comma for AND, pipe for OR",
+  "without_watch_providers":      "excluded streaming services; use comma for AND, pipe for OR",
   "with_watch_monetization_types":"pipe-separated monetization types: flatrate|free|ads|rent|buy",
-  "with_keywords":                "comma-separated theme/keyword descriptors, e.g. 'heist,time travel'",
-  "without_keywords":             "comma-separated keywords to exclude",
-  "with_type":                    "show type 0=Documentary,1=News,2=Miniseries,3=Reality,4=Scripted,5=TalkShow,6=Video (pipe for OR)",
-  "with_status":                  "status 0=Returning,1=Planned,2=InProduction,3=Ended,4=Cancelled,5=Pilot (pipe for OR)",
+  "with_keywords":                "keyword descriptors; use comma for AND, pipe for OR",
+  "without_keywords":             "excluded keywords; use comma for AND, pipe for OR",
+  "with_type":                    "show type 0=Documentary,1=News,2=Miniseries,3=Reality,4=Scripted,5=TalkShow,6=Video; comma=AND, pipe=OR",
+  "with_status":                  "status 0=Returning,1=Planned,2=InProduction,3=Ended,4=Cancelled,5=Pilot; comma=AND, pipe=OR",
   "with_original_language":       "ISO 639-1 code, e.g. 'en','es','ko','ja'",
   "with_origin_country":          "ISO 3166-1 code, e.g. 'US','GB','KR'",
   "language":                     "response language, default 'en-US'",
@@ -99,6 +223,13 @@ Available fields:
 
 Rules:
 - Distinguish with_networks (broadcast: HBO, BBC, AMC) from with_watch_providers (streaming: Netflix, Prime Video, Disney Plus, Apple TV+, Hulu).
+- For multi-value filter fields, encode user intent as follows:
+  - Use comma (,) for AND semantics (user wants all conditions at once), e.g. "drama and thriller" -> "Drama,Thriller".
+  - Use pipe (|) for OR semantics (any of the values is acceptable), e.g. "drama or thriller" -> "Drama|Thriller".
+  - If user says "either", "any", "one of", or clearly expresses alternatives, use pipe.
+  - If user says "both", "all", "must include", "and", use comma.
+- Apply the same comma/pipe rule consistently to: with_genres, without_genres, with_networks, with_companies, without_companies, with_watch_providers, without_watch_providers, with_keywords, without_keywords, with_status, with_type.
+- Do not mix comma and pipe in the same field unless the user explicitly asks for grouped logic.
 - Never include comments or extra text â€” pure JSON only.`;
 
     const userMessage = `Extract TV show search parameters from this request: "${query}"`;
@@ -178,7 +309,10 @@ Rules:
 
       const data = await response.json();
       const genreMap = new Map<string, number>(
-        (data.genres ?? []).map((g: { name: string; id: number }) => [g.name.toLowerCase(), g.id]),
+        (data.genres ?? []).map((g: { name: string; id: number }) => [
+          g.name.toLowerCase(),
+          g.id,
+        ]),
       );
 
       for (const genreName of genreNames) {
@@ -276,41 +410,134 @@ Rules:
   }
 
   /**
-   * Search TMDB for keyword ID by name
+   * Search TMDB for keyword IDs and optionally include near matches
    */
-  private async resolveKeywordIds(keywords: string[]): Promise<number[]> {
+  private async resolveKeywordIdsWithExpansion(
+    keyword: string,
+    maxIds: number,
+    includeRelated: boolean,
+  ): Promise<number[]> {
     const tmdbToken = this.getTmdbBearerToken();
-    const ids: number[] = [];
+    const normalizedKeyword = keyword.toLowerCase().trim();
 
-    for (const keyword of keywords) {
-      try {
-        const response = await fetch(
-          `https://api.themoviedb.org/3/search/keyword?query=${encodeURIComponent(keyword)}`,
-          {
-            headers: {
-              Authorization: `Bearer ${tmdbToken}`,
-              accept: 'application/json',
-            },
+    if (!normalizedKeyword) {
+      return [];
+    }
+
+    const cachedId = this.idCache.keywords.get(normalizedKeyword);
+
+    // For non-expanded lookups, a cache hit is sufficient.
+    if (!includeRelated && cachedId !== undefined) {
+      return [cachedId];
+    }
+
+    try {
+      const response = await fetch(
+        `https://api.themoviedb.org/3/search/keyword?query=${encodeURIComponent(keyword)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${tmdbToken}`,
+            accept: 'application/json',
           },
-        );
+        },
+      );
 
-        if (response.ok) {
-          const data = await response.json();
-          if (data.results && data.results.length > 0) {
-            // Use the first result (most relevant)
-            ids.push(data.results[0].id);
-            this.idCache.keywords.set(keyword.toLowerCase(), data.results[0].id);
-          }
+      if (!response.ok) {
+        return cachedId !== undefined ? [cachedId] : [];
+      }
+
+      const data = await response.json();
+      const results: Array<{ id: number; name: string }> = data.results ?? [];
+
+      if (results.length === 0) {
+        return cachedId !== undefined ? [cachedId] : [];
+      }
+
+      const ranked = results
+        .map((result) => ({
+          id: result.id,
+          score: this.rankKeywordMatch(keyword, result.name),
+        }))
+        .sort((a, b) => b.score - a.score)
+        .filter((item) => item.score > 0)
+        .slice(0, includeRelated ? Math.max(1, maxIds) : 1)
+        .map((item) => item.id);
+
+      const resolvedIds = Array.from(new Set(ranked));
+
+      if (resolvedIds.length > 0) {
+        this.idCache.keywords.set(normalizedKeyword, resolvedIds[0]);
+        return resolvedIds;
+      }
+
+      return cachedId !== undefined ? [cachedId] : [];
+    } catch (error) {
+      console.error(`Error resolving keyword IDs for ${keyword}:`, error);
+
+      if (cachedId !== undefined) {
+        return [cachedId];
+      }
+
+      return [];
+    }
+  }
+
+  /**
+   * Builds TMDB keyword expression, preserving top-level comma/pipe logic.
+   * For includeRelated=true, each concept expands to nearby keyword IDs joined by OR.
+   * 
+   * Optimization: resolveKeywordIdsWithExpansion calls are parallelized per group to avoid
+   * N+1 sequential API calls. Keywords within each group are resolved concurrently.
+   * 
+   * URL encoding note: Returns raw ID strings with | and , separators (not pre-encoded).
+   * These will be automatically URL-encoded by URLSearchParams.append() without double-encoding.
+   */
+  private async buildKeywordFilter(
+    rawKeywords: string,
+    includeRelated: boolean,
+  ): Promise<string | undefined> {
+    const groups = this.parseAndOrGroups(rawKeywords);
+    if (groups.length === 0) {
+      return undefined;
+    }
+
+    const serializedGroups: string[] = [];
+
+    for (const group of groups) {
+      // Parallelize keyword resolution within each group to avoid N+1 sequencing.
+      const keywordIdPromises = group.map((keyword) =>
+        this.resolveKeywordIdsWithExpansion(
+          keyword,
+          includeRelated ? 4 : 1,
+          includeRelated,
+        ),
+      );
+
+      const allKeywordIds = await Promise.all(keywordIdPromises);
+      const groupIds = new Set<number>();
+
+      // Collect all resolved IDs from the parallel results.
+      for (const ids of allKeywordIds) {
+        for (const id of ids) {
+          groupIds.add(id);
         }
-      } catch (error) {
-        console.error(`Error resolving keyword ID for ${keyword}:`, error);
+      }
+
+      if (groupIds.size > 0) {
+        serializedGroups.push(Array.from(groupIds).join('|'));
       }
     }
 
-    return ids;
+    if (serializedGroups.length === 0) {
+      return undefined;
+    }
+
+    return serializedGroups.join(',');
   }
 
-  async orchestrateDiscoverParameters(parsedParams: ParsedDiscoverParams): Promise<Record<string, any>> {
+  async orchestrateDiscoverParameters(
+    parsedParams: ParsedDiscoverParams,
+  ): Promise<Record<string, any>> {
     const discoverParams: Record<string, any> = {};
 
     // --- Watch region (needed early for provider resolution) ---
@@ -319,38 +546,56 @@ Rules:
 
     // --- Genres ---
     if (parsedParams.with_genres) {
-      const genreIds = await this.resolveGenreIds(parsedParams.with_genres.split(',').map((g) => g.trim()));
+      const genreIds = await this.resolveGenreIds(
+        parsedParams.with_genres.split(',').map((g) => g.trim()),
+      );
       if (genreIds.length > 0) discoverParams.with_genres = genreIds.join(',');
     }
     if (parsedParams.without_genres) {
-      const genreIds = await this.resolveGenreIds(parsedParams.without_genres.split(',').map((g) => g.trim()));
+      const genreIds = await this.resolveGenreIds(
+        parsedParams.without_genres.split(',').map((g) => g.trim()),
+      );
       if (genreIds.length > 0) discoverParams.without_genres = genreIds.join(',');
     }
 
     // --- Networks ---
     if (parsedParams.with_networks) {
-      const networkIds = await this.resolveNetworkIds(parsedParams.with_networks.split(',').map((n) => n.trim()));
+      const networkIds = await this.resolveNetworkIds(
+        parsedParams.with_networks.split(',').map((n) => n.trim()),
+      );
       if (networkIds.length > 0) discoverParams.with_networks = networkIds.join(',');
     }
 
     // --- Companies ---
     if (parsedParams.with_companies) {
-      const companyIds = await this.resolveNetworkIds(parsedParams.with_companies.split(',').map((c) => c.trim()));
+      const companyIds = await this.resolveNetworkIds(
+        parsedParams.with_companies.split(',').map((c) => c.trim()),
+      );
       if (companyIds.length > 0) discoverParams.with_companies = companyIds.join(',');
     }
     if (parsedParams.without_companies) {
-      const companyIds = await this.resolveNetworkIds(parsedParams.without_companies.split(',').map((c) => c.trim()));
+      const companyIds = await this.resolveNetworkIds(
+        parsedParams.without_companies.split(',').map((c) => c.trim()),
+      );
       if (companyIds.length > 0) discoverParams.without_companies = companyIds.join(',');
     }
 
     // --- Watch providers ---
     if (parsedParams.with_watch_providers) {
-      const providerIds = await this.resolveProviderIds(parsedParams.with_watch_providers.split(',').map((p) => p.trim()), watchRegion);
+      const providerIds = await this.resolveProviderIds(
+        parsedParams.with_watch_providers.split(',').map((p) => p.trim()),
+        watchRegion,
+      );
       if (providerIds.length > 0) discoverParams.with_watch_providers = providerIds.join('|');
     }
     if (parsedParams.without_watch_providers) {
-      const providerIds = await this.resolveProviderIds(parsedParams.without_watch_providers.split(',').map((p) => p.trim()), watchRegion);
-      if (providerIds.length > 0) discoverParams.without_watch_providers = providerIds.join('|');
+      const providerIds = await this.resolveProviderIds(
+        parsedParams.without_watch_providers.split(',').map((p) => p.trim()),
+        watchRegion,
+      );
+      if (providerIds.length > 0) {
+        discoverParams.without_watch_providers = providerIds.join('|');
+      }
     }
     if (parsedParams.with_watch_monetization_types) {
       discoverParams.with_watch_monetization_types = parsedParams.with_watch_monetization_types;
@@ -358,19 +603,30 @@ Rules:
 
     // --- Keywords ---
     if (parsedParams.with_keywords) {
-      const keywordIds = await this.resolveKeywordIds(parsedParams.with_keywords.split(',').map((k) => k.trim()));
-      if (keywordIds.length > 0) discoverParams.with_keywords = keywordIds.join(',');
+      const withKeywordsFilter = await this.buildKeywordFilter(parsedParams.with_keywords, true);
+      if (withKeywordsFilter) discoverParams.with_keywords = withKeywordsFilter;
     }
     if (parsedParams.without_keywords) {
-      const keywordIds = await this.resolveKeywordIds(parsedParams.without_keywords.split(',').map((k) => k.trim()));
-      if (keywordIds.length > 0) discoverParams.without_keywords = keywordIds.join(',');
+      const withoutKeywordsFilter = await this.buildKeywordFilter(
+        parsedParams.without_keywords,
+        false,
+      );
+      if (withoutKeywordsFilter) discoverParams.without_keywords = withoutKeywordsFilter;
     }
 
     // --- Pass-through string / enum fields ---
     const stringFields: Array<keyof ParsedDiscoverParams> = [
-      'with_original_language', 'with_origin_country', 'language', 'timezone',
-      'with_status', 'with_type', 'sort_by',
-      'first_air_date_gte', 'first_air_date_lte', 'air_date_gte', 'air_date_lte',
+      'with_original_language',
+      'with_origin_country',
+      'language',
+      'timezone',
+      'with_status',
+      'with_type',
+      'sort_by',
+      'first_air_date_gte',
+      'first_air_date_lte',
+      'air_date_gte',
+      'air_date_lte',
     ];
     for (const field of stringFields) {
       if (parsedParams[field] !== undefined && parsedParams[field] !== null) {
@@ -380,10 +636,14 @@ Rules:
 
     // --- Pass-through numeric fields (stored as strings for URLSearchParams) ---
     const numericFields: Array<keyof ParsedDiscoverParams> = [
-      'first_air_date_year', 'page',
-      'with_runtime_gte', 'with_runtime_lte',
-      'vote_average_gte', 'vote_average_lte',
-      'vote_count_gte', 'vote_count_lte',
+      'first_air_date_year',
+      'page',
+      'with_runtime_gte',
+      'with_runtime_lte',
+      'vote_average_gte',
+      'vote_average_lte',
+      'vote_count_gte',
+      'vote_count_lte',
     ];
     for (const field of numericFields) {
       if (parsedParams[field] !== undefined) {
@@ -393,7 +653,9 @@ Rules:
 
     // --- Pass-through boolean fields ---
     const booleanFields: Array<keyof ParsedDiscoverParams> = [
-      'include_adult', 'include_null_first_air_dates', 'screened_theatrically',
+      'include_adult',
+      'include_null_first_air_dates',
+      'screened_theatrically',
     ];
     for (const field of booleanFields) {
       if (parsedParams[field] !== undefined) {
