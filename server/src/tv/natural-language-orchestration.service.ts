@@ -2,7 +2,6 @@ import {
   Injectable,
   InternalServerErrorException,
   BadGatewayException,
-  BadRequestException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ParsedDiscoverParams } from './dto/natural-language-search.dto';
@@ -57,25 +56,50 @@ export class NaturalLanguageOrchestrationService {
     const groqApiKey = this.getGroqApiKey();
     const groqModel = this.getGroqModel();
 
-    const systemPrompt = `You are a TV show search parameter extractor. 
-Your job is to parse natural language TV show preferences and extract TMDB discover parameters.
-Return ONLY valid JSON (no markdown, no code blocks) with the following structure (all fields optional):
+    const systemPrompt = `You are a TV show search parameter extractor.
+Your job is to parse natural language TV show preferences and extract TMDB /discover/tv parameters.
+Return ONLY valid JSON (no markdown, no code blocks). All fields are optional — only include what the user actually mentioned.
+
+Available fields:
 {
-  "with_genres": "comma-separated genre names like 'Drama,Thriller'",
-  "with_networks": "comma-separated network names like 'HBO,Netflix'",
-  "with_watch_providers": "comma-separated provider names like 'Netflix,Prime Video'",
-  "with_keywords": "comma-separated keywords like 'horror,supernatural'",
-  "with_original_language": "language code like 'en' or 'es'",
-  "with_origin_country": "country code like 'US' or 'GB'",
-  "with_status": "0=Returning,1=Planned,2=In Production,3=Ended,4=Cancelled,5=Pilot",
-  "with_runtime_gte": 30,
-  "with_runtime_lte": 90,
-  "vote_average_gte": 6.5,
-  "watch_region": "US",
-  "include_adult": false,
-  "sort_by": "popularity.desc"
+  "with_genres":                  "comma-separated genre names, e.g. 'Drama,Thriller'",
+  "without_genres":               "comma-separated genre names to exclude",
+  "with_networks":                "comma-separated broadcast network names, e.g. 'HBO,AMC' (not streaming services)",
+  "with_companies":               "comma-separated production company names, e.g. 'BBC,A24'",
+  "without_companies":            "comma-separated production company names to exclude",
+  "with_watch_providers":         "comma-separated streaming service names, e.g. 'Netflix,Prime Video,Disney Plus'",
+  "without_watch_providers":      "comma-separated streaming services to exclude",
+  "with_watch_monetization_types":"pipe-separated monetization types: flatrate|free|ads|rent|buy",
+  "with_keywords":                "comma-separated theme/keyword descriptors, e.g. 'heist,time travel'",
+  "without_keywords":             "comma-separated keywords to exclude",
+  "with_type":                    "show type 0=Documentary,1=News,2=Miniseries,3=Reality,4=Scripted,5=TalkShow,6=Video (pipe for OR)",
+  "with_status":                  "status 0=Returning,1=Planned,2=InProduction,3=Ended,4=Cancelled,5=Pilot (pipe for OR)",
+  "with_original_language":       "ISO 639-1 code, e.g. 'en','es','ko','ja'",
+  "with_origin_country":          "ISO 3166-1 code, e.g. 'US','GB','KR'",
+  "language":                     "response language, default 'en-US'",
+  "watch_region":                 "ISO 3166-1 code for watch provider filtering, e.g. 'US','GB'",
+  "timezone":                     "timezone string, e.g. 'America/New_York'",
+  "with_runtime_gte":             30,
+  "with_runtime_lte":             90,
+  "vote_average_gte":             6.5,
+  "vote_average_lte":             10,
+  "vote_count_gte":               100,
+  "vote_count_lte":               50000,
+  "first_air_date_year":          2020,
+  "first_air_date_gte":           "YYYY-MM-DD",
+  "first_air_date_lte":           "YYYY-MM-DD",
+  "air_date_gte":                 "YYYY-MM-DD",
+  "air_date_lte":                 "YYYY-MM-DD",
+  "include_adult":                false,
+  "include_null_first_air_dates": false,
+  "screened_theatrically":        false,
+  "sort_by":                      "popularity.desc (options: popularity.asc/desc, vote_average.asc/desc, vote_count.asc/desc, first_air_date.asc/desc, name.asc/desc)",
+  "page":                         1
 }
-Leave out fields the user didn't mention. Never include field comments or non-JSON text.`;
+
+Rules:
+- Distinguish with_networks (broadcast: HBO, BBC, AMC) from with_watch_providers (streaming: Netflix, Prime Video, Disney Plus, Apple TV+, Hulu).
+- Never include comments or extra text — pure JSON only.`;
 
     const userMessage = `Extract TV show search parameters from this request: "${query}"`;
 
@@ -286,83 +310,95 @@ Leave out fields the user didn't mention. Never include field comments or non-JS
     return ids;
   }
 
-  /**
-   * Main orchestration method
-   * Takes LLM-parsed parameters and resolves all names to TMDB IDs
-   */
   async orchestrateDiscoverParameters(parsedParams: ParsedDiscoverParams): Promise<Record<string, any>> {
     const discoverParams: Record<string, any> = {};
 
-    // Process genres
-    if (parsedParams.with_genres) {
-      const genreNames = parsedParams.with_genres.split(',').map((g) => g.trim());
-      const genreIds = await this.resolveGenreIds(genreNames);
-      if (genreIds.length > 0) {
-        discoverParams.with_genres = genreIds.join(',');
-      }
-    }
-
-    // Process networks
-    if (parsedParams.with_networks) {
-      const networkNames = parsedParams.with_networks.split(',').map((n) => n.trim());
-      const networkIds = await this.resolveNetworkIds(networkNames);
-      if (networkIds.length > 0) {
-        discoverParams.with_networks = networkIds.join(',');
-      }
-    }
-
-    // Set watch region if not already set
+    // --- Watch region (needed early for provider resolution) ---
     const watchRegion = parsedParams.watch_region || 'US';
     discoverParams.watch_region = watchRegion;
 
-    // Process watch providers
+    // --- Genres ---
+    if (parsedParams.with_genres) {
+      const genreIds = await this.resolveGenreIds(parsedParams.with_genres.split(',').map((g) => g.trim()));
+      if (genreIds.length > 0) discoverParams.with_genres = genreIds.join(',');
+    }
+    if (parsedParams.without_genres) {
+      const genreIds = await this.resolveGenreIds(parsedParams.without_genres.split(',').map((g) => g.trim()));
+      if (genreIds.length > 0) discoverParams.without_genres = genreIds.join(',');
+    }
+
+    // --- Networks ---
+    if (parsedParams.with_networks) {
+      const networkIds = await this.resolveNetworkIds(parsedParams.with_networks.split(',').map((n) => n.trim()));
+      if (networkIds.length > 0) discoverParams.with_networks = networkIds.join(',');
+    }
+
+    // --- Companies ---
+    if (parsedParams.with_companies) {
+      const companyIds = await this.resolveNetworkIds(parsedParams.with_companies.split(',').map((c) => c.trim()));
+      if (companyIds.length > 0) discoverParams.with_companies = companyIds.join(',');
+    }
+    if (parsedParams.without_companies) {
+      const companyIds = await this.resolveNetworkIds(parsedParams.without_companies.split(',').map((c) => c.trim()));
+      if (companyIds.length > 0) discoverParams.without_companies = companyIds.join(',');
+    }
+
+    // --- Watch providers ---
     if (parsedParams.with_watch_providers) {
-      const providerNames = parsedParams.with_watch_providers.split(',').map((p) => p.trim());
-      const providerIds = await this.resolveProviderIds(providerNames, watchRegion);
-      if (providerIds.length > 0) {
-        discoverParams.with_watch_providers = providerIds.join('|');
-      }
+      const providerIds = await this.resolveProviderIds(parsedParams.with_watch_providers.split(',').map((p) => p.trim()), watchRegion);
+      if (providerIds.length > 0) discoverParams.with_watch_providers = providerIds.join('|');
+    }
+    if (parsedParams.without_watch_providers) {
+      const providerIds = await this.resolveProviderIds(parsedParams.without_watch_providers.split(',').map((p) => p.trim()), watchRegion);
+      if (providerIds.length > 0) discoverParams.without_watch_providers = providerIds.join('|');
+    }
+    if (parsedParams.with_watch_monetization_types) {
+      discoverParams.with_watch_monetization_types = parsedParams.with_watch_monetization_types;
     }
 
-    // Process keywords
+    // --- Keywords ---
     if (parsedParams.with_keywords) {
-      const keywordList = parsedParams.with_keywords.split(',').map((k) => k.trim());
-      const keywordIds = await this.resolveKeywordIds(keywordList);
-      if (keywordIds.length > 0) {
-        discoverParams.with_keywords = keywordIds.join(',');
+      const keywordIds = await this.resolveKeywordIds(parsedParams.with_keywords.split(',').map((k) => k.trim()));
+      if (keywordIds.length > 0) discoverParams.with_keywords = keywordIds.join(',');
+    }
+    if (parsedParams.without_keywords) {
+      const keywordIds = await this.resolveKeywordIds(parsedParams.without_keywords.split(',').map((k) => k.trim()));
+      if (keywordIds.length > 0) discoverParams.without_keywords = keywordIds.join(',');
+    }
+
+    // --- Pass-through string / enum fields ---
+    const stringFields: Array<keyof ParsedDiscoverParams> = [
+      'with_original_language', 'with_origin_country', 'language', 'timezone',
+      'with_status', 'with_type', 'sort_by',
+      'first_air_date_gte', 'first_air_date_lte', 'air_date_gte', 'air_date_lte',
+    ];
+    for (const field of stringFields) {
+      if (parsedParams[field] !== undefined && parsedParams[field] !== null) {
+        discoverParams[field] = parsedParams[field];
       }
     }
 
-    // Pass through numeric and string parameters
-    if (parsedParams.with_original_language) {
-      discoverParams.with_original_language = parsedParams.with_original_language;
+    // --- Pass-through numeric fields (stored as strings for URLSearchParams) ---
+    const numericFields: Array<keyof ParsedDiscoverParams> = [
+      'first_air_date_year', 'page',
+      'with_runtime_gte', 'with_runtime_lte',
+      'vote_average_gte', 'vote_average_lte',
+      'vote_count_gte', 'vote_count_lte',
+    ];
+    for (const field of numericFields) {
+      if (parsedParams[field] !== undefined) {
+        discoverParams[field] = String(parsedParams[field]);
+      }
     }
-    if (parsedParams.with_origin_country) {
-      discoverParams.with_origin_country = parsedParams.with_origin_country;
-    }
-    if (parsedParams.with_status !== undefined) {
-      discoverParams.with_status = String(parsedParams.with_status);
-    }
-    if (parsedParams.with_runtime_gte !== undefined) {
-      discoverParams.with_runtime_gte = String(parsedParams.with_runtime_gte);
-    }
-    if (parsedParams.with_runtime_lte !== undefined) {
-      discoverParams.with_runtime_lte = String(parsedParams.with_runtime_lte);
-    }
-    if (parsedParams.vote_average_gte !== undefined) {
-      discoverParams.vote_average_gte = String(parsedParams.vote_average_gte);
-    }
-    if (parsedParams.first_air_date_gte) {
-      discoverParams.first_air_date_gte = parsedParams.first_air_date_gte;
-    }
-    if (parsedParams.first_air_date_lte) {
-      discoverParams.first_air_date_lte = parsedParams.first_air_date_lte;
-    }
-    if (parsedParams.include_adult !== undefined) {
-      discoverParams.include_adult = String(parsedParams.include_adult);
-    }
-    if (parsedParams.sort_by) {
-      discoverParams.sort_by = parsedParams.sort_by;
+
+    // --- Pass-through boolean fields ---
+    const booleanFields: Array<keyof ParsedDiscoverParams> = [
+      'include_adult', 'include_null_first_air_dates', 'screened_theatrically',
+    ];
+    for (const field of booleanFields) {
+      if (parsedParams[field] !== undefined) {
+        discoverParams[field] = String(parsedParams[field]);
+      }
     }
 
     return discoverParams;
