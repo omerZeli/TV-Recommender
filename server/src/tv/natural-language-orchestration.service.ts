@@ -201,7 +201,7 @@ Available fields:
   "with_original_language":       "ISO 639-1 code, e.g. 'en','es','ko','ja'",
   "with_origin_country":          "ISO 3166-1 code, e.g. 'US','GB','KR'",
   "language":                     "response language, default 'en-US'",
-  "watch_region":                 "ISO 3166-1 code for watch provider filtering, e.g. 'US','GB'",
+  "watch_region":                 "ISO 3166-1 alpha-2 code for watch provider filtering; convert country names to codes (e.g. 'Israel' -> 'IL', 'United Kingdom' -> 'GB', 'United States' -> 'US')",
   "timezone":                     "timezone string, e.g. 'America/New_York'",
   "with_runtime_gte":             30,
   "with_runtime_lte":             90,
@@ -230,6 +230,8 @@ Rules:
   - If user says "both", "all", "must include", "and", use comma.
 - Apply the same comma/pipe rule consistently to: with_genres, without_genres, with_networks, with_companies, without_companies, with_watch_providers, without_watch_providers, with_keywords, without_keywords, with_status, with_type.
 - Do not mix comma and pipe in the same field unless the user explicitly asks for grouped logic.
+- Do NOT invent genres. Only use official TMDB genre names (e.g. Drama, Comedy, Action, Crime, Thriller, Sci-Fi & Fantasy, Animation, Documentary, Reality, Mystery, Family) for with_genres/without_genres. Specific themes, subjects, or professions (e.g. "lawyers", "doctors", "high school", "time travel") are NOT genres — extract them into with_keywords instead.
+- Always normalize keywords in with_keywords and without_keywords to their singular base form (e.g. output "lawyer" not "lawyers", "doctor" not "doctors", "zombie" not "zombies") to maximise TMDB keyword match rates.
 - Never include comments or extra text — pure JSON only.`;
 
     const userMessage = `Extract TV show search parameters from this request: "${query}"`;
