@@ -19,6 +19,7 @@ export function PreferencesPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [isLoadingSearch, setIsLoadingSearch] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
+  const [hasSearched, setHasSearched] = useState(false)
 
   // Recommendations state
   const [recommendations, setRecommendations] = useState<TmdbTvResult[]>([])
@@ -57,6 +58,7 @@ export function PreferencesPage() {
 
   const handleSearchWithNaturalLanguage = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    setHasSearched(true)
 
     if (searchQuery.trim().length < 10) {
       setSearchError('Please enter a search query with at least 10 characters')
@@ -244,7 +246,6 @@ export function PreferencesPage() {
             type="text"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Example: gripping drama on HBO Max or Netflix, no gore"
             aria-label="Natural language TV preferences"
           />
           <button type="submit" disabled={isLoadingSearch}>
@@ -254,7 +255,7 @@ export function PreferencesPage() {
 
         {searchError && <p className="error">{searchError}</p>}
 
-        {searchQuery.trim() && !searchError && (
+        {hasSearched && searchQuery.trim() && !searchError && (
           <p className="results-meta">Showing results for "{searchQuery.trim()}"</p>
         )}
 
@@ -336,7 +337,7 @@ export function PreferencesPage() {
           </section>
         )}
 
-        {!isLoadingSearch && recommendations.length === 0 && searchQuery.trim() && !searchError && (
+        {hasSearched && !isLoadingSearch && recommendations.length === 0 && searchQuery.trim() && !searchError && (
           <p className="results-meta">No shows found. Try refining your search.</p>
         )}
       </main>
