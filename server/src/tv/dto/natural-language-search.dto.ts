@@ -1,10 +1,25 @@
-import { IsString, MinLength, MaxLength } from 'class-validator';
+import { IsString, IsNumber, MinLength, MaxLength, IsOptional, IsArray, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class ReferenceShowDto {
+  @IsNumber()
+  tmdb_id: number;
+
+  @IsString()
+  name: string;
+}
 
 export class NaturalLanguageSearchDto {
   @IsString()
   @MinLength(10, { message: 'Search query must be at least 10 characters' })
   @MaxLength(1000, { message: 'Search query cannot exceed 1000 characters' })
   query: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ReferenceShowDto)
+  referenceShows?: ReferenceShowDto[];
 }
 
 /**

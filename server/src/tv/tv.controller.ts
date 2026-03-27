@@ -47,69 +47,107 @@ export class TvController {
   async discoverNatural(@Body() dto: NaturalLanguageSearchDto) {
     const targetCount = 20;
     const requestId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-    console.log(`[discover-natural] Request ${requestId} started for query:`, dto.query);
+    console.log(`[discover-natural][${requestId}] === NEW REQUEST ===`);
+    console.log(`[discover-natural][${requestId}] Query: "${dto.query}"`);
+    if (dto.referenceShows?.length) {
+      console.log(`[discover-natural][${requestId}] Reference shows (${dto.referenceShows.length}):`, dto.referenceShows.map((s) => s.name));
+    } else {
+      console.log(`[discover-natural][${requestId}] No reference shows provided`);
+    }
+
+    // Enrich reference shows with TMDB data if provided
+    let enrichedShows;
+    if (dto.referenceShows?.length) {
+      enrichedShows = await this.nlService.enrichReferenceShows(dto.referenceShows);
+      console.log(`[discover-natural][${requestId}] Enriched ${enrichedShows.length} reference show(s) with TMDB genres/keywords/networks`);
+    }
 
     // First pass: strict interpretation from the user's prompt.
-    const parsedParams = await this.nlService.parseWithLlm(dto.query);
-    const discoverParams = await this.nlService.orchestrateDiscoverParameters(parsedParams);
-    console.log(`[discover-natural] Request ${requestId} Pass 1 (strict) completed`);
+    console.log(`[discover-natural][${requestId}] Pass 1 (strict) — calling LLM...`);
+    const parsedParams = await this.nlService.parseWithLlm(dto.query, enrichedShows);
+    console.log(`[discover-natural][${requestId}] Pass 1 — LLM parsed params:`, JSON.stringify(parsedParams, null, 2));
+
+    // Merge enriched reference show data (genres, keywords) directly into parsed params
+    const finalParsedParams = enrichedShows?.length
+      ? this.nlService.mergeEnrichedShowsIntoParams(parsedParams, enrichedShows)
+      : parsedParams;
+    if (enrichedShows?.length) {
+      console.log(`[discover-natural][${requestId}] Pass 1 — params after reference merge:`, JSON.stringify(finalParsedParams, null, 2));
+    }
+
+    const discoverParams = await this.nlService.orchestrateDiscoverParameters(finalParsedParams);
+    console.log(`[discover-natural][${requestId}] Pass 1 — resolved TMDB discover params:`, JSON.stringify(discoverParams, null, 2));
+
     const firstResponse = await this.tvService.discover(discoverParams);
 
     let mergedResponse = firstResponse;
     let currentCount = Array.isArray(firstResponse?.results) ? firstResponse.results.length : 0;
+    console.log(`[discover-natural][${requestId}] Pass 1 — results: ${currentCount}/${targetCount}`);
+    if (currentCount > 0) {
+      console.log(`[discover-natural][${requestId}] Pass 1 — top results:`, firstResponse.results.slice(0, 5).map((s: any) => `${s.name} (${s.id})`));
+    }
 
-    if (!parsedParams.with_keywords || currentCount >= targetCount) {
+    if (!finalParsedParams.with_keywords || currentCount >= targetCount) {
       console.log(
-        `[discover-natural] Request ${requestId} completed. Reason: ${
-          !parsedParams.with_keywords ? 'no keywords' : 'full page'
-        }. Results: ${currentCount}`,
+        `[discover-natural][${requestId}] === DONE (single pass) === Reason: ${
+          !finalParsedParams.with_keywords ? 'no keywords to expand' : `already have ${currentCount} results`
+        }`,
       );
       return mergedResponse;
     }
 
     // Second pass: semantic expansion of keyword intent using Groq.
+    console.log(`[discover-natural][${requestId}] Pass 2 (expanded) — original keywords: "${finalParsedParams.with_keywords}"`);
     const expandedKeywords = await this.nlService.expandKeywordsForRecall(
       dto.query,
-      parsedParams.with_keywords,
+      finalParsedParams.with_keywords,
       currentCount,
       targetCount,
     );
 
-    if (expandedKeywords && expandedKeywords !== parsedParams.with_keywords) {
-      console.log(`[discover-natural] Request ${requestId} Pass 2 (expanded) started`);
+    if (expandedKeywords && expandedKeywords !== finalParsedParams.with_keywords) {
+      console.log(`[discover-natural][${requestId}] Pass 2 — expanded keywords: "${expandedKeywords}"`);
       const expandedParsedParams = {
-        ...parsedParams,
+        ...finalParsedParams,
         with_keywords: expandedKeywords,
       };
       const expandedDiscoverParams =
         await this.nlService.orchestrateDiscoverParameters(expandedParsedParams);
+      console.log(`[discover-natural][${requestId}] Pass 2 — resolved TMDB discover params:`, JSON.stringify(expandedDiscoverParams, null, 2));
       const expandedResponse = await this.tvService.discover(expandedDiscoverParams);
 
       mergedResponse = this.mergeDiscoverResponses(mergedResponse, expandedResponse, targetCount);
       currentCount = mergedResponse.results.length;
-      console.log(`[discover-natural] Request ${requestId} Pass 2 completed. Results: ${currentCount}`);
+      console.log(`[discover-natural][${requestId}] Pass 2 — merged results: ${currentCount}/${targetCount}`);
+    } else {
+      console.log(`[discover-natural][${requestId}] Pass 2 — skipped (keywords unchanged or empty)`);
     }
 
     // Third pass: if still sparse and original expression used strict AND, relax to OR.
-    if (currentCount < targetCount && parsedParams.with_keywords.includes(',')) {
-      console.log(`[discover-natural] Request ${requestId} Pass 3 (relaxed OR) started`);
+    if (currentCount < targetCount && finalParsedParams.with_keywords.includes(',')) {
+      const relaxedKeywords = finalParsedParams.with_keywords.replace(/,/g, '|');
+      console.log(`[discover-natural][${requestId}] Pass 3 (relaxed OR) — keywords: "${relaxedKeywords}"`);
       const relaxedParsedParams = {
-        ...parsedParams,
-        with_keywords: parsedParams.with_keywords.replace(/,/g, '|'),
+        ...finalParsedParams,
+        with_keywords: relaxedKeywords,
       };
       const relaxedDiscoverParams =
         await this.nlService.orchestrateDiscoverParameters(relaxedParsedParams);
+      console.log(`[discover-natural][${requestId}] Pass 3 — resolved TMDB discover params:`, JSON.stringify(relaxedDiscoverParams, null, 2));
       const relaxedResponse = await this.tvService.discover(relaxedDiscoverParams);
 
       mergedResponse = this.mergeDiscoverResponses(mergedResponse, relaxedResponse, targetCount);
-      console.log(`[discover-natural] Request ${requestId} Pass 3 completed. Final results: ${mergedResponse.results.length}`);
+      console.log(`[discover-natural][${requestId}] Pass 3 — final merged results: ${mergedResponse.results.length}/${targetCount}`);
     } else if (currentCount < targetCount) {
       console.log(
-        `[discover-natural] Request ${requestId} completed. Pass 3 skipped (no AND operators). Final results: ${currentCount}`,
+        `[discover-natural][${requestId}] Pass 3 — skipped (no AND operators in keywords). Results: ${currentCount}`,
       );
     }
 
-    console.log(`[discover-natural] Request ${requestId} finished successfully`);
+    console.log(`[discover-natural][${requestId}] === DONE === Total results: ${mergedResponse.results.length}`);
+    if (mergedResponse.results.length > 0) {
+      console.log(`[discover-natural][${requestId}] Final top results:`, mergedResponse.results.slice(0, 5).map((s: any) => `${s.name} (${s.id})`));
+    }
     return mergedResponse;
   }
 

@@ -1,0 +1,162 @@
+.reference-picker-btn {
+  border: 1px dashed #9b8fb8;
+  background: rgba(102, 126, 234, 0.06);
+  color: #503f96;
+  border-radius: 0.75rem;
+  padding: 0.6rem 1.2rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.reference-picker-btn:hover {
+  background: rgba(102, 126, 234, 0.12);
+  border-color: #667eea;
+}
+
+.picker-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+}
+
+.picker-modal {
+  background: #fff;
+  border-radius: 1rem;
+  width: min(640px, 92vw);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+}
+
+.picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.2rem 1.5rem 0;
+}
+
+.picker-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: #333;
+}
+
+.picker-close {
+  border: 0;
+  background: none;
+  font-size: 1.3rem;
+  cursor: pointer;
+  color: #666;
+  padding: 0.25rem;
+  line-height: 1;
+}
+
+.picker-description {
+  margin: 0.4rem 1.5rem 0;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.picker-card {
+  border: 2px solid #e0dce6;
+  border-radius: 0.75rem;
+  background: #fff;
+  cursor: pointer;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  padding: 0;
+}
+
+.picker-card:hover {
+  border-color: #667eea;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+}
+
+.picker-card--selected {
+  border-color: #667eea;
+  background: rgba(102, 126, 234, 0.06);
+}
+
+.picker-card img,
+.picker-poster-fallback {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  display: block;
+}
+
+.picker-poster-fallback {
+  background: linear-gradient(135deg, #e8e2f0, #f3f0f8);
+  color: #8a7fa0;
+  display: grid;
+  place-items: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.picker-card-name {
+  padding: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+  color: #333;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.picker-check {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  background: #667eea;
+  color: #fff;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.picker-footer {
+  padding: 0.75rem 1.5rem 1.2rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.picker-done-btn {
+  border: 0;
+  border-radius: 0.6rem;
+  background: #667eea;
+  color: #fff;
+  font-weight: 600;
+  padding: 0.6rem 1.5rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.picker-done-btn:hover {
+  background: #5568d4;
+}

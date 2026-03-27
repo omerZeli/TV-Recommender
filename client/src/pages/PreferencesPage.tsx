@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext'
 import type { TmdbTvResult } from '../types/tv'
 import { formatDateToDDMMYYYY } from '../utils/date'
 import '../TvSearch.css'
+import './PreferencesPage.css'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api'
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w342'
@@ -29,6 +30,11 @@ export function PreferencesPage() {
   const [isRemovingShowId, setIsRemovingShowId] = useState<number | null>(null)
   const [isMarkingWatchedShowId, setIsMarkingWatchedShowId] = useState<number | null>(null)
 
+  // Watchlist picker state
+  const [watchlistItems, setWatchlistItems] = useState<TmdbTvResult[]>([])
+  const [selectedReferenceIds, setSelectedReferenceIds] = useState<Set<number>>(new Set())
+  const [isPickerOpen, setIsPickerOpen] = useState(false)
+
   // Fetch watchlist on load
   useEffect(() => {
     const fetchWatchlist = async () => {
@@ -42,8 +48,9 @@ export function PreferencesPage() {
         if (response.ok) {
           const data = await response.json()
           if (Array.isArray(data)) {
-            setWatchlistIds(data.map((item: any) => item.tmdb_id))
-            setWatchedShowIds(data.filter((item: any) => item.watched).map((item: any) => item.tmdb_id))
+            setWatchlistIds(data.map((item: any) => item.id))
+            setWatchedShowIds(data.filter((item: any) => item.watched).map((item: any) => item.id))
+            setWatchlistItems(data)
           }
         }
       } catch (err) {
@@ -77,6 +84,14 @@ export function PreferencesPage() {
         },
         body: JSON.stringify({
           query: searchQuery,
+          referenceShows: selectedReferenceIds.size > 0
+            ? watchlistItems
+                .filter((item) => selectedReferenceIds.has(item.id))
+                .map((item) => ({
+                  tmdb_id: item.id,
+                  name: item.name,
+                }))
+            : undefined,
         }),
       })
 
@@ -206,6 +221,15 @@ export function PreferencesPage() {
     navigate(`/show/${show.id}`, { state: { show } })
   }
 
+  const toggleReferenceShow = (id: number) => {
+    setSelectedReferenceIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
   return (
     <>
       <header className="header">
@@ -252,6 +276,58 @@ export function PreferencesPage() {
             {isLoadingSearch ? 'Searching...' : 'Search'}
           </button>
         </form>
+
+        {watchlistItems.length > 0 && (
+          <div className="reference-picker-trigger" style={{ padding: '0 2rem', marginBottom: '1rem' }}>
+            <button
+              type="button"
+              className="reference-picker-btn"
+              onClick={() => setIsPickerOpen(true)}
+            >
+              {selectedReferenceIds.size > 0
+                ? `${selectedReferenceIds.size} show${selectedReferenceIds.size > 1 ? 's' : ''} selected as reference`
+                : 'Select shows from watchlist as reference'}
+            </button>
+          </div>
+        )}
+
+        {isPickerOpen && (
+          <div className="picker-overlay" onClick={() => setIsPickerOpen(false)}>
+            <div className="picker-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="picker-header">
+                <h3>Select Reference Shows</h3>
+                <button type="button" className="picker-close" onClick={() => setIsPickerOpen(false)}>✕</button>
+              </div>
+              <p className="picker-description">Pick shows the AI should use to understand your taste.</p>
+              <div className="picker-grid">
+                {watchlistItems.map((item) => {
+                  const isSelected = selectedReferenceIds.has(item.id)
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`picker-card ${isSelected ? 'picker-card--selected' : ''}`}
+                      onClick={() => toggleReferenceShow(item.id)}
+                    >
+                      {item.poster_path ? (
+                        <img src={`${TMDB_IMAGE_BASE}${item.poster_path}`} alt={item.name} loading="lazy" />
+                      ) : (
+                        <div className="picker-poster-fallback">No image</div>
+                      )}
+                      <span className="picker-card-name">{item.name}</span>
+                      {isSelected && <span className="picker-check">✓</span>}
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="picker-footer">
+                <button type="button" className="picker-done-btn" onClick={() => setIsPickerOpen(false)}>
+                  Done {selectedReferenceIds.size > 0 && `(${selectedReferenceIds.size})`}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {searchError && <p className="error">{searchError}</p>}
 

@@ -4,7 +4,8 @@ import {
   BadGatewayException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ParsedDiscoverParams } from './dto/natural-language-search.dto';
+import { ParsedDiscoverParams, ReferenceShowDto } from './dto/natural-language-search.dto';
+import { TvService } from './tv.service';
 
 /**
  * Maps user-friendly entity names to TMDB IDs
@@ -17,6 +18,14 @@ interface IdCache {
   keywords: Map<string, number>;
 }
 
+export interface EnrichedReferenceShow {
+  tmdb_id: number;
+  name: string;
+  genres: string[];
+  keywords: string[];
+  original_language: string;
+}
+
 @Injectable()
 export class NaturalLanguageOrchestrationService {
   private idCache: IdCache = {
@@ -26,7 +35,10 @@ export class NaturalLanguageOrchestrationService {
     keywords: new Map(),
   };
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly tvService: TvService,
+  ) {}
 
   private getTmdbBearerToken(): string {
     const tmdbBearerToken = this.configService.get<string>('TMDB_BEARER_TOKEN');
@@ -162,21 +174,111 @@ Generate a broader with_keywords expression.`;
 
       const parsed = JSON.parse(content.trim()) as { with_keywords?: string };
       if (!parsed.with_keywords) {
+        console.log('[expandKeywordsForRecall] LLM returned no with_keywords');
         return undefined;
       }
 
-      return this.normalizeKeywordExpression(parsed.with_keywords);
+      const normalized = this.normalizeKeywordExpression(parsed.with_keywords);
+      console.log(`[expandKeywordsForRecall] Original: "${originalWithKeywords}" → Expanded: "${normalized}"`);
+      return normalized;
     } catch (error) {
-      console.error('Failed to expand keywords with LLM:', error);
+      console.error('[expandKeywordsForRecall] Failed to expand keywords with LLM:', error);
       return undefined;
     }
+  }
+
+  async enrichReferenceShows(shows: ReferenceShowDto[]): Promise<EnrichedReferenceShow[]> {
+    console.log(`[enrichReferenceShows] Fetching TMDB details + keywords for ${shows.length} reference show(s)...`);
+
+    const enriched = await Promise.all(
+      shows.map(async (show) => {
+        try {
+          const [details, keywordsData] = await Promise.all([
+            this.tvService.getDetails(show.tmdb_id),
+            this.tvService.getKeywords(show.tmdb_id),
+          ]);
+
+          const result: EnrichedReferenceShow = {
+            tmdb_id: show.tmdb_id,
+            name: details.name ?? show.name,
+            genres: (details.genres ?? []).map((g: any) => g.name),
+            keywords: (keywordsData.results ?? []).map((k: any) => k.name),
+            original_language: details.original_language ?? '',
+          };
+
+          console.log(`[enrichReferenceShows] "${result.name}" — genres: [${result.genres}], keywords: [${result.keywords.slice(0, 8)}], lang: ${result.original_language}`);
+          return result;
+        } catch (err) {
+          console.error(`[enrichReferenceShows] Failed to enrich show ${show.tmdb_id} ("${show.name}"):`, err);
+          return {
+            tmdb_id: show.tmdb_id,
+            name: show.name,
+            genres: [],
+            keywords: [],
+            original_language: '',
+          } as EnrichedReferenceShow;
+        }
+      }),
+    );
+
+    return enriched;
+  }
+
+  mergeEnrichedShowsIntoParams(
+    parsedParams: ParsedDiscoverParams,
+    enrichedShows: EnrichedReferenceShow[],
+  ): ParsedDiscoverParams {
+    const merged = { ...parsedParams };
+
+    // Collect unique genres from reference shows
+    const refGenres = new Set<string>();
+    for (const show of enrichedShows) {
+      for (const g of show.genres) refGenres.add(g);
+    }
+
+    // Collect unique keywords from reference shows
+    const refKeywords = new Set<string>();
+    for (const show of enrichedShows) {
+      for (const k of show.keywords) refKeywords.add(k);
+    }
+
+    // Merge genres: flatten everything to OR (pipe) to avoid over-constraining
+    if (refGenres.size > 0) {
+      const existing = (merged.with_genres ?? '').replace(/,/g, '|');
+      const refGenreStr = Array.from(refGenres).join('|');
+      merged.with_genres = existing ? `${existing}|${refGenreStr}` : refGenreStr;
+      console.log(`[mergeEnriched] Genres after merge: "${merged.with_genres}" (added from reference: ${Array.from(refGenres).join(', ')})`);
+    }
+
+    // Merge keywords: flatten everything to OR (pipe) to avoid over-constraining
+    if (refKeywords.size > 0) {
+      const existing = (merged.with_keywords ?? '').replace(/,/g, '|');
+      const topKeywords = Array.from(refKeywords).slice(0, 10);
+      const refKeywordStr = topKeywords.join('|');
+      merged.with_keywords = existing ? `${existing}|${refKeywordStr}` : refKeywordStr;
+      console.log(`[mergeEnriched] Keywords after merge: "${merged.with_keywords}" (added from reference: ${topKeywords.join(', ')})`);
+    }
+
+    // Merge original_language if not already set by LLM
+    if (!merged.with_original_language) {
+      const langs = new Set<string>();
+      for (const show of enrichedShows) {
+        if (show.original_language) langs.add(show.original_language);
+      }
+      if (langs.size === 1) {
+        merged.with_original_language = Array.from(langs)[0];
+        console.log(`[mergeEnriched] Language set from reference: "${merged.with_original_language}"`);
+      }
+    }
+
+    return merged;
   }
 
   /**
    * Calls Groq API to parse natural language and extract TV show parameters
    * Returns a JSON-parseable string with discovered parameters
    */
-  async parseWithLlm(query: string): Promise<ParsedDiscoverParams> {
+  async parseWithLlm(query: string, enrichedShows?: EnrichedReferenceShow[]): Promise<ParsedDiscoverParams> {
     const groqApiKey = this.getGroqApiKey();
     const groqModel = this.getGroqModel();
 
@@ -234,7 +336,18 @@ Rules:
 - Always normalize keywords in with_keywords and without_keywords to their singular base form (e.g. output "lawyer" not "lawyers", "doctor" not "doctors", "zombie" not "zombies") to maximise TMDB keyword match rates.
 - Never include comments or extra text — pure JSON only.`;
 
-    const userMessage = `Extract TV show search parameters from this request: "${query}"`;
+    let userMessage = `Extract TV show search parameters from this request: "${query}"`;
+
+    if (enrichedShows && enrichedShows.length > 0) {
+      const showDescriptions = enrichedShows.map((s) => {
+        const parts = [`- "${s.name}"`];
+        if (s.genres.length) parts.push(`  Genres: ${s.genres.join(', ')}`);
+        if (s.keywords.length) parts.push(`  Keywords/Themes: ${s.keywords.slice(0, 10).join(', ')}`);
+        if (s.original_language) parts.push(`  Language: ${s.original_language}`);
+        return parts.join('\n');
+      }).join('\n\n');
+      userMessage += `\n\nThe user selected these shows from their watchlist as reference for what they enjoy. Use their genres, keywords, and language to understand the user's taste and incorporate common patterns into the search parameters:\n\n${showDescriptions}`;
+    }
 
     try {
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -274,12 +387,14 @@ Rules:
         throw new BadGatewayException('Empty response from LLM');
       }
 
+      console.log('[parseWithLlm] LLM raw response:', content);
+
       // Parse the JSON response
       const parsedParams = JSON.parse(content.trim()) as ParsedDiscoverParams;
       return parsedParams;
     } catch (error) {
       if (error instanceof SyntaxError) {
-        console.error('Failed to parse LLM response as JSON:', error);
+        console.error('[parseWithLlm] Failed to parse LLM response as JSON:', error);
         throw new BadGatewayException('Invalid response format from LLM');
       }
       throw error;
@@ -541,6 +656,7 @@ Rules:
     parsedParams: ParsedDiscoverParams,
   ): Promise<Record<string, any>> {
     const discoverParams: Record<string, any> = {};
+    console.log('[orchestrate] Starting ID resolution for parsed params...');
 
     // --- Watch region (needed early for provider resolution) ---
     const watchRegion = parsedParams.watch_region || 'US';
@@ -548,16 +664,26 @@ Rules:
 
     // --- Genres ---
     if (parsedParams.with_genres) {
-      const genreIds = await this.resolveGenreIds(
-        parsedParams.with_genres.split(',').map((g) => g.trim()),
-      );
-      if (genreIds.length > 0) discoverParams.with_genres = genreIds.join(',');
+      const andGroups = parsedParams.with_genres.split(',').map((group) => group.trim());
+      const resolvedGroups: string[] = [];
+      for (const group of andGroups) {
+        const orNames = group.split('|').map((g) => g.trim()).filter(Boolean);
+        const ids = await this.resolveGenreIds(orNames);
+        if (ids.length > 0) resolvedGroups.push(ids.join('|'));
+      }
+      if (resolvedGroups.length > 0) discoverParams.with_genres = resolvedGroups.join(',');
+      console.log(`[orchestrate] Genres: "${parsedParams.with_genres}" → IDs: "${discoverParams.with_genres ?? '(none)'}"`);
     }
     if (parsedParams.without_genres) {
-      const genreIds = await this.resolveGenreIds(
-        parsedParams.without_genres.split(',').map((g) => g.trim()),
-      );
-      if (genreIds.length > 0) discoverParams.without_genres = genreIds.join(',');
+      const andGroups = parsedParams.without_genres.split(',').map((group) => group.trim());
+      const resolvedGroups: string[] = [];
+      for (const group of andGroups) {
+        const orNames = group.split('|').map((g) => g.trim()).filter(Boolean);
+        const ids = await this.resolveGenreIds(orNames);
+        if (ids.length > 0) resolvedGroups.push(ids.join('|'));
+      }
+      if (resolvedGroups.length > 0) discoverParams.without_genres = resolvedGroups.join(',');
+      console.log(`[orchestrate] Excluded genres: "${parsedParams.without_genres}" → IDs: "${discoverParams.without_genres ?? '(none)'}"`);
     }
 
     // --- Networks ---
@@ -566,6 +692,7 @@ Rules:
         parsedParams.with_networks.split(',').map((n) => n.trim()),
       );
       if (networkIds.length > 0) discoverParams.with_networks = networkIds.join(',');
+      console.log(`[orchestrate] Networks: "${parsedParams.with_networks}" → IDs: [${networkIds}]`);
     }
 
     // --- Companies ---
@@ -574,12 +701,14 @@ Rules:
         parsedParams.with_companies.split(',').map((c) => c.trim()),
       );
       if (companyIds.length > 0) discoverParams.with_companies = companyIds.join(',');
+      console.log(`[orchestrate] Companies: "${parsedParams.with_companies}" → IDs: [${companyIds}]`);
     }
     if (parsedParams.without_companies) {
       const companyIds = await this.resolveNetworkIds(
         parsedParams.without_companies.split(',').map((c) => c.trim()),
       );
       if (companyIds.length > 0) discoverParams.without_companies = companyIds.join(',');
+      console.log(`[orchestrate] Excluded companies: "${parsedParams.without_companies}" → IDs: [${companyIds}]`);
     }
 
     // --- Watch providers ---
@@ -589,6 +718,7 @@ Rules:
         watchRegion,
       );
       if (providerIds.length > 0) discoverParams.with_watch_providers = providerIds.join('|');
+      console.log(`[orchestrate] Watch providers: "${parsedParams.with_watch_providers}" → IDs: [${providerIds}]`);
     }
     if (parsedParams.without_watch_providers) {
       const providerIds = await this.resolveProviderIds(
@@ -598,6 +728,7 @@ Rules:
       if (providerIds.length > 0) {
         discoverParams.without_watch_providers = providerIds.join('|');
       }
+      console.log(`[orchestrate] Excluded watch providers: "${parsedParams.without_watch_providers}" → IDs: [${providerIds}]`);
     }
     if (parsedParams.with_watch_monetization_types) {
       discoverParams.with_watch_monetization_types = parsedParams.with_watch_monetization_types;
@@ -607,6 +738,7 @@ Rules:
     if (parsedParams.with_keywords) {
       const withKeywordsFilter = await this.buildKeywordFilter(parsedParams.with_keywords, true);
       if (withKeywordsFilter) discoverParams.with_keywords = withKeywordsFilter;
+      console.log(`[orchestrate] Keywords: "${parsedParams.with_keywords}" → resolved filter: "${withKeywordsFilter}"`);
     }
     if (parsedParams.without_keywords) {
       const withoutKeywordsFilter = await this.buildKeywordFilter(
@@ -614,6 +746,7 @@ Rules:
         false,
       );
       if (withoutKeywordsFilter) discoverParams.without_keywords = withoutKeywordsFilter;
+      console.log(`[orchestrate] Excluded keywords: "${parsedParams.without_keywords}" → resolved filter: "${withoutKeywordsFilter}"`);
     }
 
     // --- Pass-through string / enum fields ---
