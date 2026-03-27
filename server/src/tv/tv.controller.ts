@@ -47,12 +47,17 @@ export class TvController {
   async discoverNatural(@Body() dto: NaturalLanguageSearchDto) {
     const targetCount = 20;
     const requestId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    const query = dto.query?.trim() || '';
     console.log(`[discover-natural][${requestId}] === NEW REQUEST ===`);
-    console.log(`[discover-natural][${requestId}] Query: "${dto.query}"`);
+    console.log(`[discover-natural][${requestId}] Query: "${query}"`);
     if (dto.referenceShows?.length) {
       console.log(`[discover-natural][${requestId}] Reference shows (${dto.referenceShows.length}):`, dto.referenceShows.map((s) => s.name));
     } else {
       console.log(`[discover-natural][${requestId}] No reference shows provided`);
+    }
+
+    if (!query && !dto.referenceShows?.length) {
+      return { page: 1, results: [], total_pages: 0, total_results: 0 };
     }
 
     // Enrich reference shows with TMDB data if provided
@@ -62,10 +67,15 @@ export class TvController {
       console.log(`[discover-natural][${requestId}] Enriched ${enrichedShows.length} reference show(s) with TMDB genres/keywords/networks`);
     }
 
-    // First pass: strict interpretation from the user's prompt.
-    console.log(`[discover-natural][${requestId}] Pass 1 (strict) — calling LLM...`);
-    const parsedParams = await this.nlService.parseWithLlm(dto.query, enrichedShows);
-    console.log(`[discover-natural][${requestId}] Pass 1 — LLM parsed params:`, JSON.stringify(parsedParams, null, 2));
+    // First pass: parse query with LLM (if provided), then merge reference data
+    let parsedParams: Record<string, any> = {};
+    if (query) {
+      console.log(`[discover-natural][${requestId}] Pass 1 (strict) — calling LLM...`);
+      parsedParams = await this.nlService.parseWithLlm(query, enrichedShows);
+      console.log(`[discover-natural][${requestId}] Pass 1 — LLM parsed params:`, JSON.stringify(parsedParams, null, 2));
+    } else {
+      console.log(`[discover-natural][${requestId}] Pass 1 — no query text, using reference shows only`);
+    }
 
     // Merge enriched reference show data (genres, keywords) directly into parsed params
     const finalParsedParams = enrichedShows?.length

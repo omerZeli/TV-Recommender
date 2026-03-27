@@ -10,10 +10,10 @@ export class ReferenceShowDto {
 }
 
 export class NaturalLanguageSearchDto {
+  @IsOptional()
   @IsString()
-  @MinLength(10, { message: 'Search query must be at least 10 characters' })
   @MaxLength(1000, { message: 'Search query cannot exceed 1000 characters' })
-  query: string;
+  query?: string;
 
   @IsOptional()
   @IsArray()

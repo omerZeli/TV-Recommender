@@ -67,8 +67,8 @@ export function PreferencesPage() {
     e.preventDefault()
     setHasSearched(true)
 
-    if (searchQuery.trim().length < 10) {
-      setSearchError('Please enter a search query with at least 10 characters')
+    if (searchQuery.trim().length < 10 && selectedReferenceIds.size === 0) {
+      setSearchError('Please enter a search query or select reference shows from your watchlist')
       return
     }
 
