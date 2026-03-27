@@ -242,21 +242,21 @@ Generate a broader with_keywords expression.`;
       for (const k of show.keywords) refKeywords.add(k);
     }
 
-    // Merge genres: flatten everything to OR (pipe) to avoid over-constraining
+    // Merge genres with AND (comma) — strict, will be relaxed in later passes
     if (refGenres.size > 0) {
-      const existing = (merged.with_genres ?? '').replace(/,/g, '|');
-      const refGenreStr = Array.from(refGenres).join('|');
-      merged.with_genres = existing ? `${existing}|${refGenreStr}` : refGenreStr;
-      console.log(`[mergeEnriched] Genres after merge: "${merged.with_genres}" (added from reference: ${Array.from(refGenres).join(', ')})`);
+      const existing = merged.with_genres ?? '';
+      const refGenreStr = Array.from(refGenres).join(',');
+      merged.with_genres = existing ? `${existing},${refGenreStr}` : refGenreStr;
+      console.log(`[mergeEnriched] Genres after merge (AND): "${merged.with_genres}"`);
     }
 
-    // Merge keywords: flatten everything to OR (pipe) to avoid over-constraining
+    // Merge keywords with AND (comma) — strict, will be relaxed in later passes
     if (refKeywords.size > 0) {
-      const existing = (merged.with_keywords ?? '').replace(/,/g, '|');
+      const existing = merged.with_keywords ?? '';
       const topKeywords = Array.from(refKeywords).slice(0, 10);
-      const refKeywordStr = topKeywords.join('|');
-      merged.with_keywords = existing ? `${existing}|${refKeywordStr}` : refKeywordStr;
-      console.log(`[mergeEnriched] Keywords after merge: "${merged.with_keywords}" (added from reference: ${topKeywords.join(', ')})`);
+      const refKeywordStr = topKeywords.join(',');
+      merged.with_keywords = existing ? `${existing},${refKeywordStr}` : refKeywordStr;
+      console.log(`[mergeEnriched] Keywords after merge (AND): "${merged.with_keywords}"`);
     }
 
     // Merge original_language if not already set by LLM
