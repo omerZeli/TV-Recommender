@@ -16,6 +16,9 @@ interface IdCache {
   networks: Map<string, number>;
   providers: Map<string, number>;
   keywords: Map<string, number>;
+  /** Tracks whether the full static list has been fetched and cached */
+  genresFetched: boolean;
+  providersFetched: Map<string, boolean>;
 }
 
 export interface EnrichedReferenceShow {
@@ -39,6 +42,8 @@ export class NaturalLanguageOrchestrationService {
     networks: new Map(),
     providers: new Map(),
     keywords: new Map(),
+    genresFetched: false,
+    providersFetched: new Map(),
   };
 
   constructor(
@@ -194,22 +199,35 @@ Generate a broader with_keywords expression.`;
   }
 
   async enrichReferenceShows(shows: ReferenceShowDto[]): Promise<EnrichedReferenceShow[]> {
-    console.log(`[enrichReferenceShows] Fetching TMDB details + keywords for ${shows.length} reference show(s)...`);
+    console.log(`[enrichReferenceShows] Fetching TMDB details+keywords for ${shows.length} reference show(s) (single call per show via append_to_response)...`);
+    const tmdbToken = this.getTmdbBearerToken();
 
     const enriched = await Promise.all(
       shows.map(async (show) => {
         try {
-          const [details, keywordsData] = await Promise.all([
-            this.tvService.getDetails(show.tmdb_id),
-            this.tvService.getKeywords(show.tmdb_id),
-          ]);
+          // Single TMDB call per show: details + keywords in one roundtrip
+          const response = await fetch(
+            `https://api.themoviedb.org/3/tv/${show.tmdb_id}?language=en-US&append_to_response=keywords`,
+            {
+              headers: {
+                Authorization: `Bearer ${tmdbToken}`,
+                accept: 'application/json',
+              },
+            },
+          );
+
+          if (!response.ok) {
+            throw new Error(`TMDB responded with ${response.status}`);
+          }
+
+          const data = await response.json();
 
           const result: EnrichedReferenceShow = {
             tmdb_id: show.tmdb_id,
-            name: details.name ?? show.name,
-            genres: (details.genres ?? []).map((g: any) => g.name),
-            keywords: (keywordsData.results ?? []).map((k: any) => k.name),
-            original_language: details.original_language ?? '',
+            name: data.name ?? show.name,
+            genres: (data.genres ?? []).map((g: any) => g.name),
+            keywords: (data.keywords?.results ?? []).map((k: any) => k.name),
+            original_language: data.original_language ?? '',
           };
 
           console.log(`[enrichReferenceShows] "${result.name}" — genres: [${result.genres}], keywords: [${result.keywords.slice(0, 8)}], lang: ${result.original_language}`);
@@ -230,131 +248,22 @@ Generate a broader with_keywords expression.`;
     return enriched;
   }
 
-  /**
-   * Uses the LLM to group keywords from the user query AND reference shows into
-   * 2–3 thematic clusters, ordered by universality/overlap (most shared first).
-   *
-   * The LLM sees the source context (which keywords came from the user vs. each
-   * reference show) so it can rank themes that appear across multiple sources
-   * higher than niche themes specific to a single show.
-   *
-   * Returns an array of pipe-separated theme strings, e.g.:
-   *   ['friends|sitcom|group of friends', 'geek|scientist', 'new york city']
-   */
-  async groupKeywordsIntoThemes(input: {
-    userKeywords: string[];
-    referenceShows: { name: string; keywords: string[] }[];
-  }): Promise<string[]> {
-    // Collect all unique keywords across sources for the fallback
-    const allKeywords = new Set<string>();
-    for (const kw of input.userKeywords) allKeywords.add(kw);
-    for (const show of input.referenceShows) {
-      for (const kw of show.keywords) allKeywords.add(kw);
-    }
-    const allKeywordsArr = Array.from(allKeywords);
-
-    if (allKeywordsArr.length <= 2) {
-      return allKeywordsArr.map((k) => k);
-    }
-
-    const groqApiKey = this.getGroqApiKey();
-    const groqModel = this.getGroqModel();
-
-    const systemPrompt = `You are a keyword classifier for TV show discovery.
-You receive keywords from a user's search query and from one or more reference TV shows. Your job is to merge ALL provided keywords into exactly 2 or 3 thematic clusters.
-
-Rules:
-- Each theme should contain semantically related keywords from ANY source.
-- Output ONLY the grouped keyword string — no JSON, no markdown, no explanation.
-- Within a theme, separate keywords with pipe (|). Between themes, separate with comma (,).
-- Every input keyword must appear in exactly one theme. Do not drop any keyword.
-- Prefer 3 themes when there are 5+ total keywords. Use 2 themes for fewer.
-- Do not invent new keywords — use only the ones provided.
-- CRITICAL ORDERING RULE: You MUST order themes by Universality/Overlap.
-  - Theme 1 (first) = the CORE INTERSECTION — concepts shared by the user's query AND/OR multiple reference shows (e.g. "friends|sitcom|group of friends" when both shows share friendship themes).
-  - Theme 2 = secondary shared concepts or moderately specific themes.
-  - Theme 3 (last) = the most NICHE concepts, specific to only one source (e.g. "scientist|geek" if only one show has those).
-  This ordering is essential because the system drops themes from the end during fallback, so niche themes must come last.
-
-Example:
-User keywords: funny, friends
-Show 1 "How I Met Your Mother": friends, sitcom, group of friends, new york city, love
-Show 2 "The Big Bang Theory": friends, sitcom, scientist, geek, nerd
-
-Output: friends|sitcom|group of friends|funny,love|new york city,scientist|geek|nerd`;
-
-    // Build the user message with source context
-    const lines: string[] = [];
-    if (input.userKeywords.length > 0) {
-      lines.push(`User keywords: ${input.userKeywords.join(', ')}`);
-    }
-    for (const show of input.referenceShows) {
-      if (show.keywords.length > 0) {
-        lines.push(`Show "${show.name}": ${show.keywords.join(', ')}`);
-      }
-    }
-    const userMessage = lines.join('\n');
-
-    try {
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${groqApiKey}`,
-        },
-        body: JSON.stringify({
-          model: groqModel,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userMessage },
-          ],
-          temperature: 0.1,
-          max_tokens: 300,
-        }),
-      });
-
-      if (!response.ok) {
-        console.error('[groupKeywordsIntoThemes] LLM request failed, falling back to single-keyword themes');
-        return allKeywordsArr;
-      }
-
-      const data = await response.json();
-      const content = data.choices?.[0]?.message?.content?.trim();
-
-      if (!content) {
-        console.error('[groupKeywordsIntoThemes] Empty LLM response, falling back to single-keyword themes');
-        return allKeywordsArr;
-      }
-
-      // Validate the output looks like valid TMDB syntax (pipes and commas only)
-      const normalized = this.normalizeKeywordExpression(content);
-      if (!normalized) {
-        console.error('[groupKeywordsIntoThemes] Invalid LLM output, falling back to single-keyword themes');
-        return allKeywordsArr;
-      }
-
-      const themes = this.parseAndOrGroups(normalized);
-      if (themes.length < 2 || themes.length > 3) {
-        console.warn(`[groupKeywordsIntoThemes] LLM returned ${themes.length} themes (expected 2-3), falling back to single-keyword themes`);
-        return allKeywordsArr;
-      }
-
-      // Convert parsed groups back to pipe-separated theme strings
-      const themeStrings = themes.map((group) => group.join('|'));
-      console.log(`[groupKeywordsIntoThemes] Grouped ${allKeywordsArr.length} keywords into ${themeStrings.length} themes (universality order): [${themeStrings.map((t) => `"${t}"`).join(', ')}]`);
-      return themeStrings;
-    } catch (error) {
-      console.error('[groupKeywordsIntoThemes] Error:', error);
-      return allKeywordsArr;
-    }
-  }
-
   async mergeEnrichedShowsIntoParams(
     parsedParams: ParsedDiscoverParams,
     enrichedShows: EnrichedReferenceShow[],
   ): Promise<MergeResult> {
     const merged = { ...parsedParams };
-    let keywordThemes: string[] = [];
+
+    // Use thematic_keyword_groups from the consolidated LLM call as the single
+    // source of truth for keywords. The LLM already grouped user + reference
+    // keywords into universality-ranked themes during parseWithLlm.
+    const keywordThemes = merged.thematic_keyword_groups ?? [];
+    delete merged.thematic_keyword_groups;
+
+    if (keywordThemes.length > 0) {
+      merged.with_keywords = keywordThemes.join(',');
+      console.log(`[mergeEnriched] Keywords from thematic groups (${keywordThemes.length} themes): "${merged.with_keywords}"`);
+    }
 
     // Collect unique genres from reference shows
     const refGenres = new Set<string>();
@@ -368,26 +277,6 @@ Output: friends|sitcom|group of friends|funny,love|new york city,scientist|geek|
       const refGenreStr = Array.from(refGenres).join(',');
       merged.with_genres = existing ? `${existing},${refGenreStr}` : refGenreStr;
       console.log(`[mergeEnriched] Genres after merge (AND): "${merged.with_genres}"`);
-    }
-
-    // Extract user keywords from the LLM-parsed params (split on both , and |)
-    const userKeywords: string[] = merged.with_keywords
-      ? merged.with_keywords.split(/[,|]/).map((k) => k.trim()).filter((k) => k.length > 0)
-      : [];
-
-    // Build per-show keyword lists (capped at 10 per show)
-    const referenceShows = enrichedShows
-      .filter((s) => s.keywords.length > 0)
-      .map((s) => ({ name: s.name, keywords: s.keywords.slice(0, 10) }));
-
-    // Group ALL keywords (user + reference) into overlap-ranked themes via LLM.
-    // The LLM sees the source context so it can rank shared/universal themes first
-    // and niche themes last — enabling smart progressive theme dropping.
-    if (userKeywords.length > 0 || referenceShows.length > 0) {
-      keywordThemes = await this.groupKeywordsIntoThemes({ userKeywords, referenceShows });
-      // The thematic output is the single source of truth for with_keywords
-      merged.with_keywords = keywordThemes.join(',');
-      console.log(`[mergeEnriched] Keywords after context-aware thematic merge (${keywordThemes.length} themes): "${merged.with_keywords}"`);
     }
 
     // Merge original_language if not already set by LLM
@@ -427,7 +316,6 @@ Available fields:
   "with_watch_providers":         "streaming service names; use comma for AND, pipe for OR",
   "without_watch_providers":      "excluded streaming services; use comma for AND, pipe for OR",
   "with_watch_monetization_types":"pipe-separated monetization types: flatrate|free|ads|rent|buy",
-  "with_keywords":                "keyword descriptors; use comma for AND, pipe for OR",
   "without_keywords":             "excluded keywords; use comma for AND, pipe for OR",
   "with_type":                    "show type 0=Documentary,1=News,2=Miniseries,3=Reality,4=Scripted,5=TalkShow,6=Video; comma=AND, pipe=OR",
   "with_status":                  "status 0=Returning,1=Planned,2=InProduction,3=Ended,4=Cancelled,5=Pilot; comma=AND, pipe=OR",
@@ -451,8 +339,22 @@ Available fields:
   "include_null_first_air_dates": false,
   "screened_theatrically":        false,
   "sort_by":                      "popularity.desc (options: popularity.asc/desc, vote_average.asc/desc, vote_count.asc/desc, first_air_date.asc/desc, name.asc/desc)",
-  "page":                         1
+  "page":                         1,
+  "thematic_keyword_groups":      ["theme1_kw1|theme1_kw2", "theme2_kw1|theme2_kw2", "theme3_kw1"]
 }
+
+KEYWORD HANDLING — thematic_keyword_groups (IMPORTANT):
+- Do NOT use "with_keywords". Instead, output ALL keyword/theme descriptors in "thematic_keyword_groups".
+- Group all relevant keywords (from the user's text AND from any reference shows provided) into exactly 2 or 3 thematic clusters.
+- Each array element is one theme: a pipe-separated (|) string of semantically related keywords.
+- CRITICAL ORDERING: Order themes by Universality/Overlap:
+  - Element [0] = CORE INTERSECTION — concepts shared by the user's query AND/OR multiple reference shows (e.g. "friends|sitcom|group of friends").
+  - Element [1] = secondary shared concepts or moderately specific themes.
+  - Element [2] (if present) = most NICHE concepts, specific to only one source (e.g. "scientist|geek").
+  The system drops themes from the end during fallback passes, so niche themes MUST come last.
+- Prefer 3 themes when there are 5+ total keywords. Use 2 themes for fewer.
+- Always normalize keywords to their singular base form (e.g. "lawyer" not "lawyers").
+- Do not invent keywords that are not implied by the user's query or the reference show data.
 
 Rules:
 - Distinguish with_networks (broadcast: HBO, BBC, AMC) from with_watch_providers (streaming: Netflix, Prime Video, Disney Plus, Apple TV+, Hulu).
@@ -461,10 +363,9 @@ Rules:
   - Use pipe (|) for OR semantics (any of the values is acceptable), e.g. "drama or thriller" -> "Drama|Thriller".
   - If user says "either", "any", "one of", or clearly expresses alternatives, use pipe.
   - If user says "both", "all", "must include", "and", use comma.
-- Apply the same comma/pipe rule consistently to: with_genres, without_genres, with_networks, with_companies, without_companies, with_watch_providers, without_watch_providers, with_keywords, without_keywords, with_status, with_type.
+- Apply the same comma/pipe rule consistently to: with_genres, without_genres, with_networks, with_companies, without_companies, with_watch_providers, without_watch_providers, without_keywords, with_status, with_type.
 - Do not mix comma and pipe in the same field unless the user explicitly asks for grouped logic.
-- Do NOT invent genres. Only use official TMDB genre names (e.g. Drama, Comedy, Action, Crime, Thriller, Sci-Fi & Fantasy, Animation, Documentary, Reality, Mystery, Family) for with_genres/without_genres. Specific themes, subjects, or professions (e.g. "lawyers", "doctors", "high school", "time travel") are NOT genres — extract them into with_keywords instead.
-- Always normalize keywords in with_keywords and without_keywords to their singular base form (e.g. output "lawyer" not "lawyers", "doctor" not "doctors", "zombie" not "zombies") to maximise TMDB keyword match rates.
+- Do NOT invent genres. Only use official TMDB genre names (e.g. Drama, Comedy, Action, Crime, Thriller, Sci-Fi & Fantasy, Animation, Documentary, Reality, Mystery, Family) for with_genres/without_genres. Specific themes, subjects, or professions (e.g. "lawyers", "doctors", "high school", "time travel") are NOT genres — extract them into thematic_keyword_groups instead.
 - Never include comments or extra text — pure JSON only.`;
 
     let userMessage = `Extract TV show search parameters from this request: "${query}"`;
@@ -477,7 +378,7 @@ Rules:
         if (s.original_language) parts.push(`  Language: ${s.original_language}`);
         return parts.join('\n');
       }).join('\n\n');
-      userMessage += `\n\nThe user selected these shows from their watchlist as reference for what they enjoy. Use their genres, keywords, and language to understand the user's taste and incorporate common patterns into the search parameters:\n\n${showDescriptions}`;
+      userMessage += `\n\nThe user selected these shows from their watchlist as reference for what they enjoy. Use their genres, keywords, and language to understand the user's taste and incorporate common patterns into the search parameters. When building thematic_keyword_groups, consider which keywords are shared across multiple reference shows (those should go in Theme 1) vs. niche to a single show (those go last):\n\n${showDescriptions}`;
     }
 
     try {
@@ -533,46 +434,47 @@ Rules:
   }
 
   /**
-   * Search TMDB for genre ID by name
+   * Search TMDB for genre ID by name.
+   * Caches the full genre list on first call to avoid repeated API hits.
    */
   private async resolveGenreIds(genreNames: string[]): Promise<number[]> {
-    const tmdbToken = this.getTmdbBearerToken();
-    const ids: number[] = [];
-
-    try {
-      // Get all genres from TMDB
-      const response = await fetch(
-        'https://api.themoviedb.org/3/genre/tv/list?language=en-US',
-        {
-          headers: {
-            Authorization: `Bearer ${tmdbToken}`,
-            accept: 'application/json',
+    // Populate cache on first call
+    if (!this.idCache.genresFetched) {
+      const tmdbToken = this.getTmdbBearerToken();
+      try {
+        const response = await fetch(
+          'https://api.themoviedb.org/3/genre/tv/list?language=en-US',
+          {
+            headers: {
+              Authorization: `Bearer ${tmdbToken}`,
+              accept: 'application/json',
+            },
           },
-        },
-      );
+        );
 
-      if (!response.ok) {
-        throw new BadGatewayException('Failed to fetch genres from TMDB');
-      }
-
-      const data = await response.json();
-      const genreMap = new Map<string, number>(
-        (data.genres ?? []).map((g: { name: string; id: number }) => [
-          g.name.toLowerCase(),
-          g.id,
-        ]),
-      );
-
-      for (const genreName of genreNames) {
-        const lowerName = genreName.toLowerCase().trim();
-        if (genreMap.has(lowerName)) {
-          ids.push(genreMap.get(lowerName)!);
+        if (!response.ok) {
+          throw new BadGatewayException('Failed to fetch genres from TMDB');
         }
+
+        const data = await response.json();
+        for (const g of data.genres ?? []) {
+          this.idCache.genres.set(g.name.toLowerCase(), g.id);
+        }
+        this.idCache.genresFetched = true;
+        console.log(`[resolveGenreIds] Cached ${this.idCache.genres.size} genres from TMDB`);
+      } catch (error) {
+        console.error('Error fetching genre list from TMDB:', error);
       }
-    } catch (error) {
-      console.error('Error resolving genre IDs:', error);
     }
 
+    const ids: number[] = [];
+    for (const genreName of genreNames) {
+      const lowerName = genreName.toLowerCase().trim();
+      const id = this.idCache.genres.get(lowerName);
+      if (id !== undefined) {
+        ids.push(id);
+      }
+    }
     return ids;
   }
 
@@ -612,48 +514,53 @@ Rules:
   }
 
   /**
-   * Search TMDB for watch provider ID by name
+   * Search TMDB for watch provider ID by name.
+   * Caches the full provider list per region on first call.
    */
   private async resolveProviderIds(
     providerNames: string[],
     watchRegion: string = 'US',
   ): Promise<number[]> {
-    const tmdbToken = this.getTmdbBearerToken();
-    const ids: number[] = [];
+    const regionKey = watchRegion.toUpperCase();
 
-    try {
-      const response = await fetch(
-        `https://api.themoviedb.org/3/watch/providers/tv?language=en-US&watch_region=${watchRegion}`,
-        {
-          headers: {
-            Authorization: `Bearer ${tmdbToken}`,
-            accept: 'application/json',
+    // Populate cache for this region on first call
+    if (!this.idCache.providersFetched.get(regionKey)) {
+      const tmdbToken = this.getTmdbBearerToken();
+      try {
+        const response = await fetch(
+          `https://api.themoviedb.org/3/watch/providers/tv?language=en-US&watch_region=${regionKey}`,
+          {
+            headers: {
+              Authorization: `Bearer ${tmdbToken}`,
+              accept: 'application/json',
+            },
           },
-        },
-      );
+        );
 
-      if (!response.ok) {
-        throw new BadGatewayException('Failed to fetch watch providers from TMDB');
-      }
-
-      const data = await response.json();
-      const providerMap = new Map<string, number>(
-        (data.results ?? []).map((p: { provider_name: string; provider_id: number }) => [
-          p.provider_name.toLowerCase(),
-          p.provider_id,
-        ]),
-      );
-
-      for (const providerName of providerNames) {
-        const lowerName = providerName.toLowerCase().trim();
-        if (providerMap.has(lowerName)) {
-          ids.push(providerMap.get(lowerName)!);
+        if (!response.ok) {
+          throw new BadGatewayException('Failed to fetch watch providers from TMDB');
         }
+
+        const data = await response.json();
+        for (const p of data.results ?? []) {
+          // Store with region-prefixed key to avoid collisions across regions
+          this.idCache.providers.set(`${regionKey}:${p.provider_name.toLowerCase()}`, p.provider_id);
+        }
+        this.idCache.providersFetched.set(regionKey, true);
+        console.log(`[resolveProviderIds] Cached providers for region ${regionKey}`);
+      } catch (error) {
+        console.error('Error fetching provider list from TMDB:', error);
       }
-    } catch (error) {
-      console.error('Error resolving provider IDs:', error);
     }
 
+    const ids: number[] = [];
+    for (const providerName of providerNames) {
+      const lowerName = providerName.toLowerCase().trim();
+      const id = this.idCache.providers.get(`${regionKey}:${lowerName}`);
+      if (id !== undefined) {
+        ids.push(id);
+      }
+    }
     return ids;
   }
 

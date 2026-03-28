@@ -46,6 +46,17 @@ export type TmdbTvDetails = {
   }[]
   created_by: { id: number; name: string; profile_path: string | null }[]
   popularity: number
+  videos?: {
+    results: {
+      id: string
+      key: string
+      name: string
+      site: string
+      type: string
+      official: boolean
+      published_at: string
+    }[]
+  }
 }
 
 export type TvPreferences = {

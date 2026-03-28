@@ -7,21 +7,6 @@ import type { TmdbTvDetails, TmdbTvResult } from '../types/tv'
 import { formatDateToDDMMYYYY } from '../utils/date'
 import './ShowDetailsPage.css'
 
-type TmdbVideo = {
-  id: string
-  key: string
-  name: string
-  site: string
-  type: string
-  official: boolean
-  published_at: string
-}
-
-type TmdbVideosResponse = {
-  id: number
-  results: TmdbVideo[]
-}
-
 type AddWatchlistPayload = {
   id: number
   name: string
@@ -49,9 +34,7 @@ export function ShowDetailsPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const { user, token, logout } = useAuth()
-  const [videos, setVideos] = useState<TmdbVideo[]>([])
-  const [isLoadingVideos, setIsLoadingVideos] = useState(false)
-  const [videosError, setVideosError] = useState<string | null>(null)
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false)
   const [isInWatchlist, setIsInWatchlist] = useState(false)
   const [isWatched, setIsWatched] = useState(false)
   const [isSavingToWatchlist, setIsSavingToWatchlist] = useState(false)
@@ -61,7 +44,6 @@ export function ShowDetailsPage() {
 
   const show = (location.state as { show?: TmdbTvResult } | null)?.show
   const [details, setDetails] = useState<TmdbTvDetails | null>(null)
-  const [isLoadingDetails, setIsLoadingDetails] = useState(false)
 
   useEffect(() => {
     // Always open details at the top of the page.
@@ -102,52 +84,6 @@ export function ShowDetailsPage() {
     }
 
     fetchDetails().catch(() => {})
-
-    return () => {
-      controller.abort()
-    }
-  }, [show, token])
-
-  useEffect(() => {
-    if (!show || !token) return
-
-    const controller = new AbortController()
-
-    const fetchVideos = async () => {
-      setIsLoadingVideos(true)
-      setVideosError(null)
-
-      try {
-        const response = await fetch(`${API_BASE_URL}/tv/${show.id}/videos`, {
-          method: 'GET',
-          headers: {
-            accept: 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          signal: controller.signal,
-        })
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch show videos')
-        }
-
-        const data = (await response.json()) as TmdbVideosResponse
-        setVideos(data.results || [])
-      } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') {
-          return
-        }
-
-        setVideosError('Could not load videos right now.')
-      } finally {
-        setIsLoadingVideos(false)
-      }
-    }
-
-    fetchVideos().catch(() => {
-      setVideosError('Could not load videos right now.')
-      setIsLoadingVideos(false)
-    })
 
     return () => {
       controller.abort()
@@ -321,10 +257,11 @@ export function ShowDetailsPage() {
   }
 
   const youtubeVideos = useMemo(() => {
-    return videos
+    const allVideos = details?.videos?.results ?? []
+    return allVideos
       .filter((video) => video.site === 'YouTube' && Boolean(video.key))
       .sort((a, b) => {
-        const score = (video: TmdbVideo) => {
+        const score = (video: typeof a) => {
           if (video.official && video.type === 'Trailer') return 0
           if (video.type === 'Trailer') return 1
           if (video.official) return 2
@@ -337,7 +274,7 @@ export function ShowDetailsPage() {
         return b.published_at.localeCompare(a.published_at)
       })
       .slice(0, 6)
-  }, [videos])
+  }, [details])
 
   if (!show) return null
 
@@ -534,12 +471,10 @@ export function ShowDetailsPage() {
             <section className="sdp-videos" aria-live="polite">
               <div className="sdp-videos-heading">
                 <h2>Videos</h2>
-                {isLoadingVideos && <span className="sdp-videos-status">Loading...</span>}
+                {isLoadingDetails && !details && <span className="sdp-videos-status">Loading...</span>}
               </div>
 
-              {videosError && <p className="sdp-videos-error">{videosError}</p>}
-
-              {!isLoadingVideos && !videosError && youtubeVideos.length === 0 && (
+              {!isLoadingDetails && youtubeVideos.length === 0 && (
                 <p className="sdp-videos-empty">No videos available for this show.</p>
               )}
 

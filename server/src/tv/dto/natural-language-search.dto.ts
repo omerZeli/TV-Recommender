@@ -53,6 +53,11 @@ export interface ParsedDiscoverParams {
   with_keywords?: string;
   without_keywords?: string;
 
+  // --- Thematic keyword groups (LLM output, ordered by universality) ---
+  // Each entry is a pipe-separated theme string, e.g. ["friends|sitcom", "geek|scientist"]
+  // Theme 1 = core intersection, last theme = most niche.
+  thematic_keyword_groups?: string[];
+
   // --- Show type / status ---
   with_type?: string;    // 0-6 (comma/pipe separated)
   with_status?: string;  // 0=Returning,1=Planned,2=InProduction,3=Ended,4=Cancelled,5=Pilot

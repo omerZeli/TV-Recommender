@@ -52,6 +52,7 @@ export class TvService {
 
     const searchParams = new URLSearchParams({
       language: 'en-US',
+      append_to_response: 'videos',
     });
 
     const response = await fetch(
