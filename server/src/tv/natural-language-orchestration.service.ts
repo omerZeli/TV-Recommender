@@ -26,6 +26,12 @@ export interface EnrichedReferenceShow {
   original_language: string;
 }
 
+export interface MergeResult {
+  params: ParsedDiscoverParams;
+  /** Keyword themes ordered by importance (most specific first). Empty if no reference keywords. */
+  keywordThemes: string[];
+}
+
 @Injectable()
 export class NaturalLanguageOrchestrationService {
   private idCache: IdCache = {
@@ -224,22 +230,136 @@ Generate a broader with_keywords expression.`;
     return enriched;
   }
 
-  mergeEnrichedShowsIntoParams(
+  /**
+   * Uses the LLM to group keywords from the user query AND reference shows into
+   * 2–3 thematic clusters, ordered by universality/overlap (most shared first).
+   *
+   * The LLM sees the source context (which keywords came from the user vs. each
+   * reference show) so it can rank themes that appear across multiple sources
+   * higher than niche themes specific to a single show.
+   *
+   * Returns an array of pipe-separated theme strings, e.g.:
+   *   ['friends|sitcom|group of friends', 'geek|scientist', 'new york city']
+   */
+  async groupKeywordsIntoThemes(input: {
+    userKeywords: string[];
+    referenceShows: { name: string; keywords: string[] }[];
+  }): Promise<string[]> {
+    // Collect all unique keywords across sources for the fallback
+    const allKeywords = new Set<string>();
+    for (const kw of input.userKeywords) allKeywords.add(kw);
+    for (const show of input.referenceShows) {
+      for (const kw of show.keywords) allKeywords.add(kw);
+    }
+    const allKeywordsArr = Array.from(allKeywords);
+
+    if (allKeywordsArr.length <= 2) {
+      return allKeywordsArr.map((k) => k);
+    }
+
+    const groqApiKey = this.getGroqApiKey();
+    const groqModel = this.getGroqModel();
+
+    const systemPrompt = `You are a keyword classifier for TV show discovery.
+You receive keywords from a user's search query and from one or more reference TV shows. Your job is to merge ALL provided keywords into exactly 2 or 3 thematic clusters.
+
+Rules:
+- Each theme should contain semantically related keywords from ANY source.
+- Output ONLY the grouped keyword string — no JSON, no markdown, no explanation.
+- Within a theme, separate keywords with pipe (|). Between themes, separate with comma (,).
+- Every input keyword must appear in exactly one theme. Do not drop any keyword.
+- Prefer 3 themes when there are 5+ total keywords. Use 2 themes for fewer.
+- Do not invent new keywords — use only the ones provided.
+- CRITICAL ORDERING RULE: You MUST order themes by Universality/Overlap.
+  - Theme 1 (first) = the CORE INTERSECTION — concepts shared by the user's query AND/OR multiple reference shows (e.g. "friends|sitcom|group of friends" when both shows share friendship themes).
+  - Theme 2 = secondary shared concepts or moderately specific themes.
+  - Theme 3 (last) = the most NICHE concepts, specific to only one source (e.g. "scientist|geek" if only one show has those).
+  This ordering is essential because the system drops themes from the end during fallback, so niche themes must come last.
+
+Example:
+User keywords: funny, friends
+Show 1 "How I Met Your Mother": friends, sitcom, group of friends, new york city, love
+Show 2 "The Big Bang Theory": friends, sitcom, scientist, geek, nerd
+
+Output: friends|sitcom|group of friends|funny,love|new york city,scientist|geek|nerd`;
+
+    // Build the user message with source context
+    const lines: string[] = [];
+    if (input.userKeywords.length > 0) {
+      lines.push(`User keywords: ${input.userKeywords.join(', ')}`);
+    }
+    for (const show of input.referenceShows) {
+      if (show.keywords.length > 0) {
+        lines.push(`Show "${show.name}": ${show.keywords.join(', ')}`);
+      }
+    }
+    const userMessage = lines.join('\n');
+
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${groqApiKey}`,
+        },
+        body: JSON.stringify({
+          model: groqModel,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage },
+          ],
+          temperature: 0.1,
+          max_tokens: 300,
+        }),
+      });
+
+      if (!response.ok) {
+        console.error('[groupKeywordsIntoThemes] LLM request failed, falling back to single-keyword themes');
+        return allKeywordsArr;
+      }
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content?.trim();
+
+      if (!content) {
+        console.error('[groupKeywordsIntoThemes] Empty LLM response, falling back to single-keyword themes');
+        return allKeywordsArr;
+      }
+
+      // Validate the output looks like valid TMDB syntax (pipes and commas only)
+      const normalized = this.normalizeKeywordExpression(content);
+      if (!normalized) {
+        console.error('[groupKeywordsIntoThemes] Invalid LLM output, falling back to single-keyword themes');
+        return allKeywordsArr;
+      }
+
+      const themes = this.parseAndOrGroups(normalized);
+      if (themes.length < 2 || themes.length > 3) {
+        console.warn(`[groupKeywordsIntoThemes] LLM returned ${themes.length} themes (expected 2-3), falling back to single-keyword themes`);
+        return allKeywordsArr;
+      }
+
+      // Convert parsed groups back to pipe-separated theme strings
+      const themeStrings = themes.map((group) => group.join('|'));
+      console.log(`[groupKeywordsIntoThemes] Grouped ${allKeywordsArr.length} keywords into ${themeStrings.length} themes (universality order): [${themeStrings.map((t) => `"${t}"`).join(', ')}]`);
+      return themeStrings;
+    } catch (error) {
+      console.error('[groupKeywordsIntoThemes] Error:', error);
+      return allKeywordsArr;
+    }
+  }
+
+  async mergeEnrichedShowsIntoParams(
     parsedParams: ParsedDiscoverParams,
     enrichedShows: EnrichedReferenceShow[],
-  ): ParsedDiscoverParams {
+  ): Promise<MergeResult> {
     const merged = { ...parsedParams };
+    let keywordThemes: string[] = [];
 
     // Collect unique genres from reference shows
     const refGenres = new Set<string>();
     for (const show of enrichedShows) {
       for (const g of show.genres) refGenres.add(g);
-    }
-
-    // Collect unique keywords from reference shows
-    const refKeywords = new Set<string>();
-    for (const show of enrichedShows) {
-      for (const k of show.keywords) refKeywords.add(k);
     }
 
     // Merge genres with AND (comma) — strict, will be relaxed in later passes
@@ -250,13 +370,24 @@ Generate a broader with_keywords expression.`;
       console.log(`[mergeEnriched] Genres after merge (AND): "${merged.with_genres}"`);
     }
 
-    // Merge keywords with AND (comma) — strict, will be relaxed in later passes
-    if (refKeywords.size > 0) {
-      const existing = merged.with_keywords ?? '';
-      const topKeywords = Array.from(refKeywords).slice(0, 10);
-      const refKeywordStr = topKeywords.join(',');
-      merged.with_keywords = existing ? `${existing},${refKeywordStr}` : refKeywordStr;
-      console.log(`[mergeEnriched] Keywords after merge (AND): "${merged.with_keywords}"`);
+    // Extract user keywords from the LLM-parsed params (split on both , and |)
+    const userKeywords: string[] = merged.with_keywords
+      ? merged.with_keywords.split(/[,|]/).map((k) => k.trim()).filter((k) => k.length > 0)
+      : [];
+
+    // Build per-show keyword lists (capped at 10 per show)
+    const referenceShows = enrichedShows
+      .filter((s) => s.keywords.length > 0)
+      .map((s) => ({ name: s.name, keywords: s.keywords.slice(0, 10) }));
+
+    // Group ALL keywords (user + reference) into overlap-ranked themes via LLM.
+    // The LLM sees the source context so it can rank shared/universal themes first
+    // and niche themes last — enabling smart progressive theme dropping.
+    if (userKeywords.length > 0 || referenceShows.length > 0) {
+      keywordThemes = await this.groupKeywordsIntoThemes({ userKeywords, referenceShows });
+      // The thematic output is the single source of truth for with_keywords
+      merged.with_keywords = keywordThemes.join(',');
+      console.log(`[mergeEnriched] Keywords after context-aware thematic merge (${keywordThemes.length} themes): "${merged.with_keywords}"`);
     }
 
     // Merge original_language if not already set by LLM
@@ -271,7 +402,7 @@ Generate a broader with_keywords expression.`;
       }
     }
 
-    return merged;
+    return { params: merged, keywordThemes };
   }
 
   /**

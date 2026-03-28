@@ -80,11 +80,18 @@ export class TvController {
       log('LLM parsed params:', JSON.stringify(llmParams, null, 2));
     }
 
-    // Merge reference data into params (uses AND for strict matching)
-    const mergedParams = enrichedShows?.length
-      ? this.nlService.mergeEnrichedShowsIntoParams(llmParams, enrichedShows)
-      : llmParams;
+    // Merge reference data into params (uses thematic grouping for keywords)
+    let mergedParams: Record<string, any> = llmParams;
+    let keywordThemes: string[] = [];
+    if (enrichedShows?.length) {
+      const mergeResult = await this.nlService.mergeEnrichedShowsIntoParams(llmParams, enrichedShows);
+      mergedParams = mergeResult.params;
+      keywordThemes = mergeResult.keywordThemes;
+    }
     log('Merged params:', JSON.stringify(mergedParams, null, 2));
+    if (keywordThemes.length > 0) {
+      log(`Keyword themes (${keywordThemes.length}):`, keywordThemes);
+    }
 
     let accumulated = { page: 1, results: [] as any[], total_pages: 0, total_results: 0 };
 
@@ -101,49 +108,50 @@ export class TvController {
       return accumulated.results.length;
     };
 
-    // === Pass 1: Strictest — all keywords AND, all genres AND ===
-    let count = await runPass('Pass 1 (strict AND)', mergedParams);
+    // Helper: build with_keywords from a subset of themes (comma-joined = AND between themes)
+    const themesToKeywords = (themes: string[]) => themes.join(',');
+    const genresAsOr = (genres?: string) => genres?.replace(/,/g, '|');
+
+    // === Pass 1 (Strict): Genres AND + All keyword themes required ===
+    let count = await runPass('Pass 1 (genres AND, all themes)', mergedParams);
     if (count >= targetCount) { log('=== DONE ==='); return accumulated; }
 
-    // === Pass 2: Keywords OR, genres AND ===
-    if (mergedParams.with_keywords?.includes(',')) {
-      const p2 = { ...mergedParams, with_keywords: mergedParams.with_keywords.replace(/,/g, '|') };
-      count = await runPass('Pass 2 (keywords OR)', p2);
+    // === Pass 2 (Relaxed Genres): Genres OR + All keyword themes required ===
+    if (mergedParams.with_genres?.includes(',')) {
+      const p2 = {
+        ...mergedParams,
+        with_genres: genresAsOr(mergedParams.with_genres),
+      };
+      count = await runPass('Pass 2 (genres OR, all themes)', p2);
       if (count >= targetCount) { log('=== DONE ==='); return accumulated; }
     }
 
-    // === Pass 3: Keywords OR, genres OR ===
-    if (mergedParams.with_genres?.includes(',')) {
+    // === Pass 3 (Drop least important theme): Genres OR + Top 2 themes ===
+    if (keywordThemes.length > 2) {
       const p3 = {
         ...mergedParams,
-        with_keywords: mergedParams.with_keywords?.replace(/,/g, '|'),
-        with_genres: mergedParams.with_genres.replace(/,/g, '|'),
+        with_keywords: themesToKeywords(keywordThemes.slice(0, 2)),
+        with_genres: genresAsOr(mergedParams.with_genres),
       };
-      count = await runPass('Pass 3 (keywords OR, genres OR)', p3);
+      count = await runPass('Pass 3 (genres OR, top 2 themes)', p3);
       if (count >= targetCount) { log('=== DONE ==='); return accumulated; }
     }
 
-    // === Pass 4: LLM keyword expansion (if query provided) ===
-    if (query && mergedParams.with_keywords) {
-      const currentKeywords = mergedParams.with_keywords.replace(/,/g, '|');
-      const expandedKeywords = await this.nlService.expandKeywordsForRecall(
-        query, currentKeywords, count, targetCount,
-      );
-      if (expandedKeywords && expandedKeywords !== currentKeywords) {
-        const p4 = {
-          ...mergedParams,
-          with_keywords: expandedKeywords,
-          with_genres: mergedParams.with_genres?.replace(/,/g, '|'),
-        };
-        count = await runPass('Pass 4 (LLM expanded keywords)', p4);
-        if (count >= targetCount) { log('=== DONE ==='); return accumulated; }
-      }
+    // === Pass 4 (Core theme only): Genres OR + Top theme only ===
+    if (keywordThemes.length > 1) {
+      const p4 = {
+        ...mergedParams,
+        with_keywords: keywordThemes[0],
+        with_genres: genresAsOr(mergedParams.with_genres),
+      };
+      count = await runPass('Pass 4 (genres OR, core theme only)', p4);
+      if (count >= targetCount) { log('=== DONE ==='); return accumulated; }
     }
 
-    // === Pass 5: Drop keywords, genres OR only ===
+    // === Pass 5: Drop keywords entirely, genres OR only ===
     if (mergedParams.with_genres) {
       const { with_keywords: _, ...rest } = mergedParams;
-      const p5 = { ...rest, with_genres: mergedParams.with_genres.replace(/,/g, '|') };
+      const p5 = { ...rest, with_genres: genresAsOr(mergedParams.with_genres) };
       count = await runPass('Pass 5 (genres only, no keywords)', p5);
     }
 
