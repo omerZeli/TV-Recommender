@@ -271,6 +271,49 @@ Generate a broader with_keywords expression.`;
       for (const g of show.genres) refGenres.add(g);
     }
 
+    // --- Smart Kids Genre Filter ---
+    const hasKidsInWith = merged.with_genres?.toLowerCase().includes('kids');
+    const hasKidsInWithout = merged.without_genres?.toLowerCase().includes('kids');
+
+    if (!hasKidsInWith && !hasKidsInWithout && enrichedShows.length > 0) {
+      const kidsShowCount = enrichedShows.filter(show =>
+        show.genres.some(g => g.toLowerCase() === 'kids'),
+      ).length;
+
+      if (kidsShowCount === 0) {
+        // Exclude Kids if 0 reference shows are Kids
+        const existingWithout = merged.without_genres
+          ? merged.without_genres.split(',')
+          : [];
+        existingWithout.push('Kids');
+        merged.without_genres = existingWithout
+          .map(g => g.trim())
+          .filter(Boolean)
+          .join(',');
+        // Ensure it's removed from refGenres just in case
+        for (const g of Array.from(refGenres)) {
+          if (g.toLowerCase() === 'kids') refGenres.delete(g);
+        }
+        console.log(
+          '[mergeEnriched] Auto-excluding "Kids" genre (0 kids reference shows)',
+        );
+      } else if (kidsShowCount > enrichedShows.length / 2) {
+        // Force Kids as a strict requirement
+        refGenres.add('Kids');
+        console.log(
+          '[mergeEnriched] Auto-including "Kids" genre (majority reference shows are kids)',
+        );
+      } else {
+        // Minority are Kids shows -> Remove it from strict refGenres so it doesn't force a strict AND
+        for (const g of Array.from(refGenres)) {
+          if (g.toLowerCase() === 'kids') refGenres.delete(g);
+        }
+        console.log(
+          '[mergeEnriched] Kids genre is minority, removing from strict refGenres',
+        );
+      }
+    }
+
     // Merge genres with AND (comma) — strict, will be relaxed in later passes
     if (refGenres.size > 0) {
       const existing = merged.with_genres ?? '';

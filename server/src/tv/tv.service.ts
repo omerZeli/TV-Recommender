@@ -248,6 +248,12 @@ export class TvService {
     }
 
     // Ensure required defaults
+    if (!searchParams.has('vote_average.gte')) {
+      searchParams.append('vote_average.gte', '5');
+    }
+    if (!searchParams.has('vote_count.gte')) {
+      searchParams.append('vote_count.gte', '30');
+    }
     if (!searchParams.has('include_adult')) {
       searchParams.append('include_adult', 'false');
     }
