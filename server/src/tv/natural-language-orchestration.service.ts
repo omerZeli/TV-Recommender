@@ -346,16 +346,16 @@ Available fields:
 }
 
 KEYWORD HANDLING — thematic_keyword_groups (IMPORTANT):
-- Do NOT use "with_keywords". Instead, output ALL keyword/theme descriptors in "thematic_keyword_groups".
-- Group all relevant keywords (from the user's text AND from any reference shows) into exactly 2 or 3 thematic clusters.
-- Each array element is one theme: a pipe-separated (|) string of semantically related keywords.
-- CRITICAL ORDERING & THEME CONSTRUCTION:
-  - Element [0] (Theme 1) = THE CORE DNA. This must contain the absolute defining concepts of the request. If there are multiple reference shows, this is the core intersection (e.g., "friends|sitcom"). CRITICAL: Do not separate inextricably linked concepts that define a show's unique identity. For example, if a show relies on BOTH "dysfunctional family" AND "wealth/business" (like Succession), put them BOTH in Theme 1 (e.g., "dysfunctional family|wealth|businessman|media tycoon").
-  - Element [1] (Theme 2) = SECONDARY ELEMENTS. Secondary plot points, character tropes, or sub-genres (e.g., "white collar criminal|sibling").
-  - Element [2] (Theme 3) = SETTING & NICHE. Pure settings, locations, atmospheric descriptors, or concepts highly specific to only one out of many reference shows (e.g., "new york city", "scientist").
-  The system drops themes from the end during fallback passes, so settings and niche themes MUST come last.
-- Prefer 3 themes when there are 5+ total keywords. Use 2 themes for fewer.
-- DO NOT split multi-word TMDB keywords into single words. If the reference show data contains multi-word keywords like "dysfunctional family", keep the exact full phrase intact (e.g., use "dysfunctional family|wealth", never "family|dysfunctional").
+- Do NOT use "with_keywords". Instead, output ALL keyword descriptors in "thematic_keyword_groups".
+- Group all relevant keywords into exactly 2 to 4 thematic clusters.
+- TMDB LOGIC: Different array elements are treated as REQUIRED (AND). Pipes (|) inside a single string are treated as OPTIONAL (OR).
+- RULE 1 (Split Distinct Pillars): If a show's identity is a mix of two DISTINCT concepts (e.g., "business/wealth" AND "family"), you MUST put them in separate elements. DO NOT group them with a pipe, or TMDB will return wrong shows.
+- RULE 2 (Group Synonyms): If concepts are highly similar synonyms (e.g., "friends", "sitcom", "roommates"), group them TOGETHER in Element [0] using pipes.
+- CRITICAL ORDERING BY UNIQUENESS (This dictates fallback success):
+  - Element [0] MUST be the MOST UNIQUE, SPECIFIC, and DEFINING core pillar (e.g., "media tycoon|businessman|white collar criminal"). Never put broad/generic terms like "family" or "relationships" in Element [0].
+  - Element [1] = The broader/secondary core pillar (e.g., "dysfunctional family").
+  - Element [Last] = Settings/locations (e.g., "new york city"). MUST come last so they are dropped first.
+- DO NOT split multi-word TMDB keywords into single words (e.g., use "dysfunctional family", never "family|dysfunctional").
 
 Rules:
 - Distinguish with_networks (broadcast: HBO, BBC, AMC) from with_watch_providers (streaming: Netflix, Prime Video, Disney Plus, Apple TV+, Hulu).

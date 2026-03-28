@@ -123,44 +123,55 @@ export class TvController {
       if (count >= targetCount) { log('=== DONE ==='); return accumulated; }
     }
 
-    // === Pass 3 (Drop least important theme): Genres OR + Top 2 themes ===
-    if (keywordThemes.length > 2) {
+    // === Pass 3 (Strict Themes): Genres OR + Top 2 themes ANDed ===
+    if (keywordThemes.length > 1) {
       const p3 = {
         ...mergedParams,
         with_keywords: themesToKeywords(keywordThemes.slice(0, 2)),
         with_genres: genresAsOr(mergedParams.with_genres),
       };
-      count = await runPass('Pass 3 (genres OR, top 2 themes)', p3);
+      count = await runPass('Pass 3 (genres OR, top 2 themes AND)', p3);
       if (count >= targetCount) { log('=== DONE ==='); return accumulated; }
     }
 
-    // === Pass 4 (Strict Genres, Core theme only): Genres AND + Top 1 theme ===
+    // === Pass 4 (Primary Niche Core): Genres AND + Theme 0 only ===
     if (keywordThemes.length > 0) {
       const p4 = {
         ...mergedParams,
         with_keywords: keywordThemes[0],
-        with_genres: mergedParams.with_genres, // Strict AND (original comma-separated)
+        with_genres: mergedParams.with_genres, // Strict AND genres
       };
-      count = await runPass('Pass 4 (genres AND, core theme only)', p4);
+      count = await runPass('Pass 4 (genres AND, theme 0 only)', p4);
       if (count >= targetCount) { log('=== DONE ==='); return accumulated; }
     }
 
-    // === Pass 5 (Relaxed Genres, Core theme only): Genres OR + Top 1 theme ===
+    // === Pass 5 (Primary Niche Core Relaxed): Genres OR + Theme 0 only ===
     if (keywordThemes.length > 0) {
       const p5 = {
         ...mergedParams,
         with_keywords: keywordThemes[0],
         with_genres: genresAsOr(mergedParams.with_genres),
       };
-      count = await runPass('Pass 5 (genres OR, core theme only)', p5);
+      count = await runPass('Pass 5 (genres OR, theme 0 only)', p5);
       if (count >= targetCount) { log('=== DONE ==='); return accumulated; }
     }
 
-    // === Pass 6: Drop keywords entirely, genres OR only ===
+    // === Pass 6 (Secondary Core Fallback): Genres OR + Theme 1 only ===
+    if (keywordThemes.length > 1) {
+      const p6 = {
+        ...mergedParams,
+        with_keywords: keywordThemes[1],
+        with_genres: genresAsOr(mergedParams.with_genres),
+      };
+      count = await runPass('Pass 6 (genres OR, theme 1 only)', p6);
+      if (count >= targetCount) { log('=== DONE ==='); return accumulated; }
+    }
+
+    // === Pass 7: Drop keywords entirely, genres OR only ===
     if (mergedParams.with_genres) {
       const { with_keywords: _, ...rest } = mergedParams;
-      const p6 = { ...rest, with_genres: genresAsOr(mergedParams.with_genres) };
-      count = await runPass('Pass 6 (genres only, no keywords)', p6);
+      const p7 = { ...rest, with_genres: genresAsOr(mergedParams.with_genres) };
+      count = await runPass('Pass 7 (genres only, no keywords)', p7);
     }
 
     log(`=== DONE === Total results: ${accumulated.results.length}`);
