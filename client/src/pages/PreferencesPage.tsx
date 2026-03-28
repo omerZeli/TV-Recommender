@@ -12,18 +12,48 @@ import './PreferencesPage.css'
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api'
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w342'
 
+const PREF_STORAGE_KEY = 'pref-search-state'
+
+const isReloadNavigation = (): boolean => {
+  const navigationEntries = window.performance.getEntriesByType('navigation')
+  const navigationEntry = navigationEntries[0] as PerformanceNavigationTiming | undefined
+  return navigationEntry?.type === 'reload'
+}
+
+let shouldResetPrefStateOnFirstMount = isReloadNavigation()
+
+const getInitialPrefState = (): { searchQuery: string; hasSearched: boolean; recommendations: TmdbTvResult[] } => {
+  if (shouldResetPrefStateOnFirstMount) {
+    shouldResetPrefStateOnFirstMount = false
+    sessionStorage.removeItem(PREF_STORAGE_KEY)
+    return { searchQuery: '', hasSearched: false, recommendations: [] }
+  }
+
+  try {
+    const raw = sessionStorage.getItem(PREF_STORAGE_KEY)
+    if (!raw) return { searchQuery: '', hasSearched: false, recommendations: [] }
+    const parsed = JSON.parse(raw)
+    return {
+      searchQuery: typeof parsed.searchQuery === 'string' ? parsed.searchQuery : '',
+      hasSearched: parsed.hasSearched === true,
+      recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : [],
+    }
+  } catch {
+    return { searchQuery: '', hasSearched: false, recommendations: [] }
+  }
+}
+
 export function PreferencesPage() {
   const { user, token, logout } = useAuth()
   const navigate = useNavigate()
 
-  // Natural language search state
-  const [searchQuery, setSearchQuery] = useState('')
+  const initialPrefState = getInitialPrefState()
+
+  const [searchQuery, setSearchQuery] = useState(initialPrefState.searchQuery)
   const [isLoadingSearch, setIsLoadingSearch] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
-  const [hasSearched, setHasSearched] = useState(false)
-
-  // Recommendations state
-  const [recommendations, setRecommendations] = useState<TmdbTvResult[]>([])
+  const [hasSearched, setHasSearched] = useState(initialPrefState.hasSearched)
+  const [recommendations, setRecommendations] = useState<TmdbTvResult[]>(initialPrefState.recommendations)
   const [watchlistIds, setWatchlistIds] = useState<number[]>([])
   const [watchedShowIds, setWatchedShowIds] = useState<number[]>([])
   const [isAddingShowId, setIsAddingShowId] = useState<number | null>(null)
@@ -34,6 +64,11 @@ export function PreferencesPage() {
   const [watchlistItems, setWatchlistItems] = useState<TmdbTvResult[]>([])
   const [selectedReferenceIds, setSelectedReferenceIds] = useState<Set<number>>(new Set())
   const [isPickerOpen, setIsPickerOpen] = useState(false)
+
+  // Persist search state to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem(PREF_STORAGE_KEY, JSON.stringify({ searchQuery, hasSearched, recommendations }))
+  }, [searchQuery, hasSearched, recommendations])
 
   // Fetch watchlist on load
   useEffect(() => {

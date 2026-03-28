@@ -275,8 +275,10 @@ Generate a broader with_keywords expression.`;
     if (refGenres.size > 0) {
       const existing = merged.with_genres ?? '';
       const refGenreStr = Array.from(refGenres).join(',');
-      merged.with_genres = existing ? `${existing},${refGenreStr}` : refGenreStr;
-      console.log(`[mergeEnriched] Genres after merge (AND): "${merged.with_genres}"`);
+      const combined = existing ? `${existing},${refGenreStr}` : refGenreStr;
+      const uniqueGenres = [...new Set(combined.split(',').map(g => g.trim()).filter(Boolean))];
+      merged.with_genres = uniqueGenres.join(',');
+      console.log(`[mergeEnriched] Genres after merge (AND, deduplicated): "${merged.with_genres}"`);
     }
 
     // Merge original_language if not already set by LLM
@@ -344,17 +346,20 @@ Available fields:
 }
 
 KEYWORD HANDLING — thematic_keyword_groups (IMPORTANT):
-- Do NOT use "with_keywords". Instead, output ALL keyword/theme descriptors in "thematic_keyword_groups".
-- Group all relevant keywords (from the user's text AND from any reference shows provided) into exactly 2 or 3 thematic clusters.
-- Each array element is one theme: a pipe-separated (|) string of semantically related keywords.
-- CRITICAL ORDERING: Order themes by Universality/Overlap:
-  - Element [0] = CORE INTERSECTION — concepts shared by the user's query AND/OR multiple reference shows (e.g. "friends|sitcom|group of friends").
-  - Element [1] = secondary shared concepts or moderately specific themes.
-  - Element [2] (if present) = most NICHE concepts, specific to only one source (e.g. "scientist|geek").
-  The system drops themes from the end during fallback passes, so niche themes MUST come last.
-- Prefer 3 themes when there are 5+ total keywords. Use 2 themes for fewer.
+- Do NOT use "with_keywords". Output ALL keywords in "thematic_keyword_groups".
+- Group all relevant keywords into exactly 2 to 4 thematic clusters.
+- Each array element represents ONE REQUIRED CONCEPT in the early passes (they are ANDed together). Inside each string, use pipes (|) for OR logic (synonyms).
+- CRITICAL ORDERING (Most important to least important):
+  - Element [0] = CORE IDENTITY PART 1 (e.g., "businessman|wealth|media tycoon")
+  - Element [1] = CORE IDENTITY PART 2 (e.g., "dysfunctional family|sibling")
+  - Element [2] = SECONDARY PLOT (e.g., "white collar criminal|betrayal")
+  - Element [3] = SETTING/NICHE (e.g., "new york city")
+  If a show is defined by the intersection of TWO vastly different concepts (like "Business" AND "Family" for Succession), you MUST separate them into Element [0] and Element [1]. DO NOT put "family|business" in the same string, because we need the TMDB API to enforce finding BOTH.
+  The system drops themes from the end during fallback passes. By separating the core concepts into [0] and [1], early passes will enforce BOTH.
+- Prefer 3–4 themes when there are 5+ total keywords. Use 2 themes for fewer.
 - Always normalize keywords to their singular base form (e.g. "lawyer" not "lawyers").
 - Do not invent keywords that are not implied by the user's query or the reference show data.
+- DO NOT split multi-word TMDB keywords into single words. If the reference show data contains multi-word keywords like "dysfunctional family", keep the exact full phrase intact (e.g., use "dysfunctional family|sibling", never "family|dysfunctional").
 
 Rules:
 - Distinguish with_networks (broadcast: HBO, BBC, AMC) from with_watch_providers (streaming: Netflix, Prime Video, Disney Plus, Apple TV+, Hulu).
@@ -368,7 +373,12 @@ Rules:
 - Do NOT invent genres. Only use official TMDB genre names (e.g. Drama, Comedy, Action, Crime, Thriller, Sci-Fi & Fantasy, Animation, Documentary, Reality, Mystery, Family) for with_genres/without_genres. Specific themes, subjects, or professions (e.g. "lawyers", "doctors", "high school", "time travel") are NOT genres — extract them into thematic_keyword_groups instead.
 - Never include comments or extra text — pure JSON only.`;
 
-    let userMessage = `Extract TV show search parameters from this request: "${query}"`;
+    let userMessage: string;
+    if (query) {
+      userMessage = `Extract TV show search parameters from this request: "${query}"`;
+    } else {
+      userMessage = `The user did not provide a text query. Instead, they selected reference shows from their watchlist. Analyze the reference shows below and generate search parameters (especially thematic_keyword_groups) based on the overlapping themes, genres, and keywords across these shows.`;
+    }
 
     if (enrichedShows && enrichedShows.length > 0) {
       const showDescriptions = enrichedShows.map((s) => {
@@ -421,8 +431,11 @@ Rules:
 
       console.log('[parseWithLlm] LLM raw response:', content);
 
+      // Strip markdown code fences if the LLM wrapped the JSON in ```json ... ```
+      const cleaned = content.trim().replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?\s*```$/i, '').trim();
+
       // Parse the JSON response
-      const parsedParams = JSON.parse(content.trim()) as ParsedDiscoverParams;
+      const parsedParams = JSON.parse(cleaned) as ParsedDiscoverParams;
       return parsedParams;
     } catch (error) {
       if (error instanceof SyntaxError) {

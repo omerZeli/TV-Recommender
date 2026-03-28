@@ -72,9 +72,9 @@ export class TvController {
     // Collect reference show IDs to exclude from results
     const excludeIds = new Set<number>(dto.referenceShows?.map((s) => s.tmdb_id) ?? []);
 
-    // Parse query with LLM if provided
+    // Parse query with LLM if there is a text query OR enriched reference shows
     let llmParams: Record<string, any> = {};
-    if (query) {
+    if (query || enrichedShows?.length) {
       log('Calling LLM to parse query...');
       llmParams = await this.nlService.parseWithLlm(query, enrichedShows);
       log('LLM parsed params:', JSON.stringify(llmParams, null, 2));
@@ -126,33 +126,54 @@ export class TvController {
       if (count >= targetCount) { log('=== DONE ==='); return accumulated; }
     }
 
-    // === Pass 3 (Drop least important theme): Genres OR + Top 2 themes ===
-    if (keywordThemes.length > 2) {
+    // === Pass 3 (Drop niche themes): Genres OR + Top 3 themes ===
+    if (keywordThemes.length > 3) {
       const p3 = {
+        ...mergedParams,
+        with_keywords: themesToKeywords(keywordThemes.slice(0, 3)),
+        with_genres: genresAsOr(mergedParams.with_genres),
+      };
+      count = await runPass('Pass 3 (genres OR, top 3 themes)', p3);
+      if (count >= targetCount) { log('=== DONE ==='); return accumulated; }
+    }
+
+    // === Pass 4 (Strict Genres, Core DNA): Genres AND + Top 2 themes ===
+    if (keywordThemes.length > 1) {
+      const p4 = {
+        ...mergedParams,
+        with_keywords: themesToKeywords(keywordThemes.slice(0, 2)),
+      };
+      count = await runPass('Pass 4 (genres AND, top 2 themes)', p4);
+      if (count >= targetCount) { log('=== DONE ==='); return accumulated; }
+    }
+
+    // === Pass 5 (Relaxed Genres, Core DNA): Genres OR + Top 2 themes ===
+    if (keywordThemes.length > 1) {
+      const p5 = {
         ...mergedParams,
         with_keywords: themesToKeywords(keywordThemes.slice(0, 2)),
         with_genres: genresAsOr(mergedParams.with_genres),
       };
-      count = await runPass('Pass 3 (genres OR, top 2 themes)', p3);
+      count = await runPass('Pass 5 (genres OR, top 2 themes)', p5);
       if (count >= targetCount) { log('=== DONE ==='); return accumulated; }
     }
 
-    // === Pass 4 (Core theme only): Genres OR + Top theme only ===
-    if (keywordThemes.length > 1) {
-      const p4 = {
+    // === Pass 6 (Relaxed Genres, single theme): Genres OR + Top 1 theme ===
+    if (keywordThemes.length > 0) {
+      const p6 = {
         ...mergedParams,
         with_keywords: keywordThemes[0],
         with_genres: genresAsOr(mergedParams.with_genres),
       };
-      count = await runPass('Pass 4 (genres OR, core theme only)', p4);
+      count = await runPass('Pass 6 (genres OR, top 1 theme)', p6);
       if (count >= targetCount) { log('=== DONE ==='); return accumulated; }
     }
 
-    // === Pass 5: Drop keywords entirely, genres OR only ===
+    // === Pass 7: Drop keywords entirely, genres OR only ===
     if (mergedParams.with_genres) {
       const { with_keywords: _, ...rest } = mergedParams;
-      const p5 = { ...rest, with_genres: genresAsOr(mergedParams.with_genres) };
-      count = await runPass('Pass 5 (genres only, no keywords)', p5);
+      const p7 = { ...rest, with_genres: genresAsOr(mergedParams.with_genres) };
+      count = await runPass('Pass 7 (genres only, no keywords)', p7);
     }
 
     log(`=== DONE === Total results: ${accumulated.results.length}`);
