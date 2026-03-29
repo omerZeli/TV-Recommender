@@ -383,7 +383,6 @@ export function TvSearch() {
           type="text"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search TV shows, e.g. Gossip Girl"
           aria-label="Search TV shows"
         />
         <button type="submit" disabled={isLoading}>

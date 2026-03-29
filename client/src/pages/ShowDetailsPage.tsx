@@ -287,9 +287,6 @@ export function ShowDetailsPage() {
           <button className="sdp-back-btn" onClick={() => navigate(-1)} aria-label="Go back">
             ← Back
           </button>
-          <button className="sdp-back-btn" onClick={() => navigate('/watchlist')} aria-label="Go to watchlist">
-            My Watchlist
-          </button>
           <span className="sdp-site-title">TV Recommender</span>
           <div className="sdp-user-section">
             {user && (

@@ -405,41 +405,46 @@ export function PreferencesPage() {
                     </p>
                     <p className="overview">{show.overview || 'No overview available.'}</p>
                     <div className="card-actions">
-                    {watchlistIds.includes(show.id) ? (
-                      <>
-                        <button
-                          onClick={(e) => handleRemoveFromWatchlist(e, show.id)}
-                          disabled={isRemovingShowId === show.id || isMarkingWatchedShowId === show.id}
-                          className="watchlist-btn watchlist-btn--remove"
-                          type="button"
-                        >
-                          {isRemovingShowId === show.id ? 'Removing...' : 'Remove from Watchlist'}
-                        </button>
-                        <button
-                          onClick={(e) => handleMarkAsWatched(e, show)}
-                          disabled={isRemovingShowId === show.id || isMarkingWatchedShowId === show.id}
-                          className={`watch-eye-btn ${watchedShowIds.includes(show.id) ? 'watch-eye-btn--done' : ''}`}
-                          type="button"
-                          aria-label={watchedShowIds.includes(show.id) ? 'Mark as unwatched' : 'Mark as watched'}
-                          title={watchedShowIds.includes(show.id) ? 'Mark as unwatched' : 'Mark as watched'}
-                        >
-                          {isMarkingWatchedShowId === show.id
-                            ? '...'
-                            : watchedShowIds.includes(show.id)
-                              ? <VisibilityIcon fontSize="small" />
-                              : <VisibilityOutlinedIcon fontSize="small" />}
-                        </button>
-                      </>
-                    ) : (
                       <button
-                        onClick={(e) => handleAddToWatchlist(e, show)}
-                        disabled={isAddingShowId === show.id || isMarkingWatchedShowId === show.id}
-                        className="watchlist-btn"
+                        className={`watchlist-btn ${watchlistIds.includes(show.id) ? 'watchlist-btn--remove' : ''}`}
                         type="button"
+                        onClick={(e) =>
+                          watchlistIds.includes(show.id)
+                            ? handleRemoveFromWatchlist(e, show.id)
+                            : handleAddToWatchlist(e, show)
+                        }
+                        disabled={
+                          isAddingShowId === show.id ||
+                          isRemovingShowId === show.id ||
+                          isMarkingWatchedShowId === show.id
+                        }
                       >
-                        {isAddingShowId === show.id ? 'Adding...' : 'Add to Watchlist'}
+                        {watchlistIds.includes(show.id)
+                          ? isRemovingShowId === show.id
+                            ? 'Removing...'
+                            : 'Remove from Watchlist'
+                          : isAddingShowId === show.id
+                            ? 'Adding...'
+                            : 'Add to Watchlist'}
                       </button>
-                    )}
+                      <button
+                        className={`watch-eye-btn ${watchedShowIds.includes(show.id) ? 'watch-eye-btn--done' : ''}`}
+                        type="button"
+                        aria-label={watchedShowIds.includes(show.id) ? 'Mark as unwatched' : 'Mark as watched'}
+                        title={watchedShowIds.includes(show.id) ? 'Mark as unwatched' : 'Mark as watched'}
+                        onClick={(e) => handleMarkAsWatched(e, show)}
+                        disabled={
+                          isMarkingWatchedShowId === show.id ||
+                          isAddingShowId === show.id ||
+                          isRemovingShowId === show.id
+                        }
+                      >
+                        {isMarkingWatchedShowId === show.id
+                          ? '...'
+                          : watchedShowIds.includes(show.id)
+                            ? <VisibilityIcon fontSize="small" />
+                            : <VisibilityOutlinedIcon fontSize="small" />}
+                      </button>
                     </div>
                   </div>
                 </article>

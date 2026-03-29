@@ -279,6 +279,10 @@
   background: #1d7f4d;
 }
 
+.watch-eye-btn--done:not(:disabled):hover {
+  background: #166b3e;
+}
+
 @media (max-width: 720px) {
   .search-bar {
     grid-template-columns: 1fr;
