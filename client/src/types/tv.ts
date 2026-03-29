@@ -46,6 +46,19 @@ export type TmdbTvDetails = {
   }[]
   created_by: { id: number; name: string; profile_path: string | null }[]
   popularity: number
+  aggregate_credits?: {
+    cast: {
+      id: number
+      name: string
+      profile_path: string | null
+      order: number
+      roles: { character: string; episode_count: number }[]
+      total_episode_count: number
+    }[]
+  }
+  keywords?: {
+    results: { id: number; name: string }[]
+  }
   videos?: {
     results: {
       id: string

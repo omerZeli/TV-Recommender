@@ -205,6 +205,7 @@
   display: flex;
   flex-direction: column;
   gap: 2rem;
+  min-width: 0;
 }
 
 .sdp-actions {
@@ -419,6 +420,86 @@
   color: #3b3340;
   line-height: 1.75;
   font-size: 1rem;
+}
+
+.sdp-keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 1rem;
+}
+
+.sdp-keyword-tag {
+  background: #f0eaf6;
+  color: #5a4478;
+  border-radius: 999px;
+  padding: 0.2rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+/* ── Cast ──────────────────────────────────────────────────────── */
+.sdp-cast {
+  background: #fff;
+  border: 1px solid #e8e2db;
+  border-radius: 0.85rem;
+  padding: 1.25rem 1.35rem;
+  box-shadow: 0 2px 8px rgba(54, 30, 2, 0.06);
+  overflow: hidden;
+}
+
+.sdp-cast h2 {
+  margin: 0 0 0.9rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #1f1a22;
+}
+
+.sdp-cast-grid {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  scrollbar-width: thin;
+}
+
+.sdp-cast-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.5rem;
+  flex: 0 0 120px;
+  min-width: 0;
+}
+
+.sdp-cast-photo {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #ede6f2;
+}
+
+.sdp-cast-photo--empty {
+  display: block;
+}
+
+.sdp-cast-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.sdp-cast-name {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #1f1a22;
+}
+
+.sdp-cast-character {
+  font-size: 0.78rem;
+  color: #7a7080;
 }
 
 /* ── Videos ────────────────────────────────────────────────────── */

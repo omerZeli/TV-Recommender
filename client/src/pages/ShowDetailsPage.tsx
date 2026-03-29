@@ -465,7 +465,42 @@ export function ShowDetailsPage() {
             <div className="sdp-synopsis">
               <h2>Overview</h2>
               <p>{display.overview || 'No overview available.'}</p>
+              {details?.keywords?.results && details.keywords.results.length > 0 && (
+                <div className="sdp-keywords">
+                  {details.keywords.results.map((kw) => (
+                    <span key={kw.id} className="sdp-keyword-tag">{kw.name}</span>
+                  ))}
+                </div>
+              )}
             </div>
+
+            {details?.aggregate_credits?.cast && details.aggregate_credits.cast.length > 0 && (
+              <section className="sdp-cast">
+                <h2>Series Cast</h2>
+                <div className="sdp-cast-grid">
+                  {details.aggregate_credits.cast.slice(0, 12).map((actor) => (
+                    <div key={actor.id} className="sdp-cast-card">
+                      {actor.profile_path ? (
+                        <img
+                          src={`https://image.tmdb.org/t/p/w185${actor.profile_path}`}
+                          alt={actor.name}
+                          className="sdp-cast-photo"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="sdp-cast-photo sdp-cast-photo--empty" aria-hidden="true" />
+                      )}
+                      <div className="sdp-cast-info">
+                        <span className="sdp-cast-name">{actor.name}</span>
+                        <span className="sdp-cast-character">
+                          {actor.roles.map((r) => r.character).filter(Boolean).join(' / ') || 'Unknown'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
 
             <section className="sdp-videos" aria-live="polite">
               <div className="sdp-videos-heading">
