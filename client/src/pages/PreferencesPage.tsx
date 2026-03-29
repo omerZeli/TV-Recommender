@@ -1,18 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { FormEvent, MouseEvent } from 'react'
-import VisibilityIcon from '@mui/icons-material/Visibility'
-import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
+import type { FormEvent } from 'react'
 import { useAuth } from '../context/AuthContext'
 import type { TmdbTvResult } from '../types/tv'
-import { formatDateToDDMMYYYY } from '../utils/date'
 import '../TvSearch.css'
 import './PreferencesPage.css'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api'
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w342'
 
-const PREF_STORAGE_KEY = 'pref-search-state'
+export const PREF_STORAGE_KEY = 'pref-search-state'
 
 const isReloadNavigation = (): boolean => {
   const navigationEntries = window.performance.getEntriesByType('navigation')
@@ -22,24 +19,25 @@ const isReloadNavigation = (): boolean => {
 
 let shouldResetPrefStateOnFirstMount = isReloadNavigation()
 
-const getInitialPrefState = (): { searchQuery: string; hasSearched: boolean; recommendations: TmdbTvResult[] } => {
+export const getInitialPrefState = (): { searchQuery: string; hasSearched: boolean; recommendations: TmdbTvResult[]; selectedReferenceIds: number[] } => {
   if (shouldResetPrefStateOnFirstMount) {
     shouldResetPrefStateOnFirstMount = false
     sessionStorage.removeItem(PREF_STORAGE_KEY)
-    return { searchQuery: '', hasSearched: false, recommendations: [] }
+    return { searchQuery: '', hasSearched: false, recommendations: [], selectedReferenceIds: [] }
   }
 
   try {
     const raw = sessionStorage.getItem(PREF_STORAGE_KEY)
-    if (!raw) return { searchQuery: '', hasSearched: false, recommendations: [] }
+    if (!raw) return { searchQuery: '', hasSearched: false, recommendations: [], selectedReferenceIds: [] }
     const parsed = JSON.parse(raw)
     return {
       searchQuery: typeof parsed.searchQuery === 'string' ? parsed.searchQuery : '',
       hasSearched: parsed.hasSearched === true,
       recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : [],
+      selectedReferenceIds: Array.isArray(parsed.selectedReferenceIds) ? parsed.selectedReferenceIds : [],
     }
   } catch {
-    return { searchQuery: '', hasSearched: false, recommendations: [] }
+    return { searchQuery: '', hasSearched: false, recommendations: [], selectedReferenceIds: [] }
   }
 }
 
@@ -52,23 +50,31 @@ export function PreferencesPage() {
   const [searchQuery, setSearchQuery] = useState(initialPrefState.searchQuery)
   const [isLoadingSearch, setIsLoadingSearch] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
-  const [hasSearched, setHasSearched] = useState(initialPrefState.hasSearched)
-  const [recommendations, setRecommendations] = useState<TmdbTvResult[]>(initialPrefState.recommendations)
-  const [watchlistIds, setWatchlistIds] = useState<number[]>([])
-  const [watchedShowIds, setWatchedShowIds] = useState<number[]>([])
-  const [isAddingShowId, setIsAddingShowId] = useState<number | null>(null)
-  const [isRemovingShowId, setIsRemovingShowId] = useState<number | null>(null)
-  const [isMarkingWatchedShowId, setIsMarkingWatchedShowId] = useState<number | null>(null)
 
   // Watchlist picker state
   const [watchlistItems, setWatchlistItems] = useState<TmdbTvResult[]>([])
-  const [selectedReferenceIds, setSelectedReferenceIds] = useState<Set<number>>(new Set())
+  const [selectedReferenceIds, setSelectedReferenceIds] = useState<Set<number>>(
+    new Set(initialPrefState.selectedReferenceIds),
+  )
   const [isPickerOpen, setIsPickerOpen] = useState(false)
 
-  // Persist search state to sessionStorage
+  // Persist search query and selected references to sessionStorage
   useEffect(() => {
-    sessionStorage.setItem(PREF_STORAGE_KEY, JSON.stringify({ searchQuery, hasSearched, recommendations }))
-  }, [searchQuery, hasSearched, recommendations])
+    try {
+      const raw = sessionStorage.getItem(PREF_STORAGE_KEY)
+      const existing = raw ? JSON.parse(raw) : {}
+      sessionStorage.setItem(
+        PREF_STORAGE_KEY,
+        JSON.stringify({
+          ...existing,
+          searchQuery,
+          selectedReferenceIds: Array.from(selectedReferenceIds),
+        }),
+      )
+    } catch {
+      // ignore
+    }
+  }, [searchQuery, selectedReferenceIds])
 
   // Fetch watchlist on load
   useEffect(() => {
@@ -83,8 +89,6 @@ export function PreferencesPage() {
         if (response.ok) {
           const data = await response.json()
           if (Array.isArray(data)) {
-            setWatchlistIds(data.map((item: any) => item.id))
-            setWatchedShowIds(data.filter((item: any) => item.watched).map((item: any) => item.id))
             setWatchlistItems(data)
           }
         }
@@ -100,11 +104,25 @@ export function PreferencesPage() {
 
   const handleSearchWithNaturalLanguage = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    setHasSearched(true)
 
     if (searchQuery.trim().length < 10 && selectedReferenceIds.size === 0) {
       setSearchError('Please enter a search query or select reference shows from your watchlist')
       return
+    }
+
+    // Check if query and references are unchanged from last search — if so, show cached results
+    if (initialPrefState.recommendations.length > 0) {
+      const currentRefIds = Array.from(selectedReferenceIds).sort((a, b) => a - b)
+      const lastRefIds = [...initialPrefState.selectedReferenceIds].sort((a, b) => a - b)
+      const sameQuery = searchQuery === initialPrefState.searchQuery
+      const sameRefs =
+        currentRefIds.length === lastRefIds.length &&
+        currentRefIds.every((id, i) => id === lastRefIds[i])
+
+      if (sameQuery && sameRefs) {
+        navigate('/preferences/results')
+        return
+      }
     }
 
     setIsLoadingSearch(true)
@@ -132,11 +150,20 @@ export function PreferencesPage() {
 
       if (response.ok) {
         const data = await response.json()
-        setRecommendations(data.results || [])
-        console.log('Found', data.results?.length || 0, 'shows matching your natural language query')
+        const results: TmdbTvResult[] = data.results || []
+        // Save to sessionStorage and navigate to results page
+        sessionStorage.setItem(
+          PREF_STORAGE_KEY,
+          JSON.stringify({
+            searchQuery,
+            hasSearched: true,
+            recommendations: results,
+            selectedReferenceIds: Array.from(selectedReferenceIds),
+          }),
+        )
+        navigate('/preferences/results')
       } else {
         setSearchError('Failed to process your search. Please try again with different wording.')
-        console.error('API response:', response.status, response.statusText)
       }
     } catch (err) {
       console.error('Failed to fetch recommendations:', err)
@@ -144,116 +171,6 @@ export function PreferencesPage() {
     } finally {
       setIsLoadingSearch(false)
     }
-  }
-
-  const handleAddToWatchlist = async (event: MouseEvent<HTMLButtonElement>, show: TmdbTvResult) => {
-    event.stopPropagation()
-    setIsAddingShowId(show.id)
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/watchlist`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          id: show.id,
-          name: show.name,
-          overview: show.overview,
-          poster_path: show.poster_path,
-          backdrop_path: show.backdrop_path,
-          first_air_date: show.first_air_date,
-          vote_average: show.vote_average,
-          vote_count: show.vote_count,
-          original_name: show.original_name,
-          original_language: show.original_language,
-          origin_country: show.origin_country,
-        }),
-      })
-
-      if (response.ok) {
-        setWatchlistIds((prev) => [...prev, show.id])
-      }
-    } catch (err) {
-      console.error('Failed to add to watchlist:', err)
-    } finally {
-      setIsAddingShowId(null)
-    }
-  }
-
-  const handleRemoveFromWatchlist = async (event: MouseEvent<HTMLButtonElement>, showId: number) => {
-    event.stopPropagation()
-    setIsRemovingShowId(showId)
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/watchlist/${showId}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
-      if (response.ok) {
-        setWatchlistIds((prev) => prev.filter((id) => id !== showId))
-        setWatchedShowIds((prev) => prev.filter((id) => id !== showId))
-      }
-    } catch (err) {
-      console.error('Failed to remove from watchlist:', err)
-    } finally {
-      setIsRemovingShowId(null)
-    }
-  }
-
-  const handleMarkAsWatched = async (event: MouseEvent<HTMLButtonElement>, show: TmdbTvResult) => {
-    event.stopPropagation()
-    setIsMarkingWatchedShowId(show.id)
-
-    const newWatchedState = !watchedShowIds.includes(show.id)
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/watchlist/${show.id}/watched`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          watched: newWatchedState,
-          show: newWatchedState
-            ? undefined
-            : {
-                id: show.id,
-                name: show.name,
-                overview: show.overview,
-                poster_path: show.poster_path,
-                backdrop_path: show.backdrop_path,
-                first_air_date: show.first_air_date,
-                vote_average: show.vote_average,
-                vote_count: show.vote_count,
-                original_name: show.original_name,
-                original_language: show.original_language,
-                origin_country: show.origin_country,
-              },
-        }),
-      })
-
-      if (response.ok) {
-        if (newWatchedState) {
-          setWatchedShowIds((prev) => [...prev, show.id])
-        } else {
-          setWatchedShowIds((prev) => prev.filter((id) => id !== show.id))
-        }
-      }
-    } catch (err) {
-      console.error('Failed to mark as watched:', err)
-    } finally {
-      setIsMarkingWatchedShowId(null)
-    }
-  }
-
-  const handleCardClick = (show: TmdbTvResult) => {
-    navigate(`/show/${show.id}`, { state: { show } })
   }
 
   const toggleReferenceShow = (id: number) => {
@@ -365,97 +282,6 @@ export function PreferencesPage() {
         )}
 
         {searchError && <p className="error">{searchError}</p>}
-
-        {hasSearched && searchQuery.trim() && !searchError && (
-          <p className="results-meta">Showing results for "{searchQuery.trim()}"</p>
-        )}
-
-        {recommendations.length > 0 && (
-          <section className="results-section">
-            <p className="results-meta">Found {recommendations.length} shows</p>
-            <div className="results-grid" aria-live="polite">
-              {recommendations.map((show) => (
-                <article
-                  key={show.id}
-                  className="card"
-                  onClick={() => handleCardClick(show)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      handleCardClick(show)
-                    }
-                  }}
-                >
-                  {show.poster_path ? (
-                    <img
-                      src={`${TMDB_IMAGE_BASE}${show.poster_path}`}
-                      alt={`${show.name} poster`}
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="poster-fallback">No image</div>
-                  )}
-
-                  <div className="card-content">
-                    <h2>{show.name}</h2>
-                    <p className="meta">
-                      {formatDateToDDMMYYYY(show.first_air_date) || 'Unknown date'} • ⭐{' '}
-                      {show.vote_average.toFixed(1)}
-                    </p>
-                    <p className="overview">{show.overview || 'No overview available.'}</p>
-                    <div className="card-actions">
-                      <button
-                        className={`watchlist-btn ${watchlistIds.includes(show.id) ? 'watchlist-btn--remove' : ''}`}
-                        type="button"
-                        onClick={(e) =>
-                          watchlistIds.includes(show.id)
-                            ? handleRemoveFromWatchlist(e, show.id)
-                            : handleAddToWatchlist(e, show)
-                        }
-                        disabled={
-                          isAddingShowId === show.id ||
-                          isRemovingShowId === show.id ||
-                          isMarkingWatchedShowId === show.id
-                        }
-                      >
-                        {watchlistIds.includes(show.id)
-                          ? isRemovingShowId === show.id
-                            ? 'Removing...'
-                            : 'Remove from Watchlist'
-                          : isAddingShowId === show.id
-                            ? 'Adding...'
-                            : 'Add to Watchlist'}
-                      </button>
-                      <button
-                        className={`watch-eye-btn ${watchedShowIds.includes(show.id) ? 'watch-eye-btn--done' : ''}`}
-                        type="button"
-                        aria-label={watchedShowIds.includes(show.id) ? 'Mark as unwatched' : 'Mark as watched'}
-                        title={watchedShowIds.includes(show.id) ? 'Mark as unwatched' : 'Mark as watched'}
-                        onClick={(e) => handleMarkAsWatched(e, show)}
-                        disabled={
-                          isMarkingWatchedShowId === show.id ||
-                          isAddingShowId === show.id ||
-                          isRemovingShowId === show.id
-                        }
-                      >
-                        {isMarkingWatchedShowId === show.id
-                          ? '...'
-                          : watchedShowIds.includes(show.id)
-                            ? <VisibilityIcon fontSize="small" />
-                            : <VisibilityOutlinedIcon fontSize="small" />}
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {hasSearched && !isLoadingSearch && recommendations.length === 0 && searchQuery.trim() && !searchError && (
-          <p className="results-meta">No shows found. Try refining your search.</p>
-        )}
       </main>
     </>
   )

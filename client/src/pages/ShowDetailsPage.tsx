@@ -284,9 +284,11 @@ export function ShowDetailsPage() {
     <div className="sdp-root">
       <header className="sdp-header">
         <div className="sdp-header-content">
-          <button className="sdp-back-btn" onClick={() => navigate(-1)} aria-label="Go back">
-            ← Back
-          </button>
+          <div className="sdp-header-left">
+            <button className="sdp-back-btn" onClick={() => navigate(-1)} aria-label="Go back">
+              ← Back
+            </button>
+          </div>
           <span className="sdp-site-title">TV Recommender</span>
           <div className="sdp-user-section">
             {user && (

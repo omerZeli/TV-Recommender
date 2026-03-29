@@ -6,6 +6,7 @@ import { TvSearch } from './TvSearch'
 import { ShowDetailsPage } from './pages/ShowDetailsPage'
 import { WatchlistPage } from './pages/WatchlistPage'
 import { PreferencesPage } from './pages/PreferencesPage'
+import { PreferencesResultsPage } from './pages/PreferencesResultsPage'
 
 function AppRoutes() {
   const { token } = useAuth()
@@ -17,6 +18,7 @@ function AppRoutes() {
           <Route path="/" element={<TvSearch />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
           <Route path="/preferences" element={<PreferencesPage />} />
+          <Route path="/preferences/results" element={<PreferencesResultsPage />} />
           <Route path="/show/:id" element={<ShowDetailsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </>
