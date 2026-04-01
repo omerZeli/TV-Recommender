@@ -57,6 +57,7 @@ export function PreferencesPage() {
     new Set(initialPrefState.selectedReferenceIds),
   )
   const [isPickerOpen, setIsPickerOpen] = useState(false)
+  const [pickerFilter, setPickerFilter] = useState('')
 
   // Persist search query and selected references to sessionStorage
   useEffect(() => {
@@ -251,26 +252,48 @@ export function PreferencesPage() {
                 <button type="button" className="picker-close" onClick={() => setIsPickerOpen(false)}>✕</button>
               </div>
               <p className="picker-description">Pick shows the AI should use to understand your taste.</p>
+
+              {watchlistItems.length > 0 && (
+                <div className="picker-search-bar">
+                  <input
+                    type="text"
+                    placeholder="Search in watchlist..."
+                    value={pickerFilter}
+                    onChange={(e) => setPickerFilter(e.target.value)}
+                    aria-label="Filter watchlist shows"
+                  />
+                </div>
+              )}
+
               <div className="picker-grid">
-                {watchlistItems.map((item) => {
-                  const isSelected = selectedReferenceIds.has(item.id)
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className={`picker-card ${isSelected ? 'picker-card--selected' : ''}`}
-                      onClick={() => toggleReferenceShow(item.id)}
-                    >
-                      {item.poster_path ? (
-                        <img src={`${TMDB_IMAGE_BASE}${item.poster_path}`} alt={item.name} loading="lazy" />
-                      ) : (
-                        <div className="picker-poster-fallback">No image</div>
-                      )}
-                      <span className="picker-card-name">{item.name}</span>
-                      {isSelected && <span className="picker-check">✓</span>}
-                    </button>
+                {watchlistItems.length === 0 && (
+                  <p className="picker-empty">Your watchlist is empty.</p>
+                )}
+                {watchlistItems
+                  .filter((item) =>
+                    pickerFilter.trim() === ''
+                      ? true
+                      : item.name.toLowerCase().includes(pickerFilter.trim().toLowerCase()),
                   )
-                })}
+                  .map((item) => {
+                    const isSelected = selectedReferenceIds.has(item.id)
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`picker-card ${isSelected ? 'picker-card--selected' : ''}`}
+                        onClick={() => toggleReferenceShow(item.id)}
+                      >
+                        {item.poster_path ? (
+                          <img src={`${TMDB_IMAGE_BASE}${item.poster_path}`} alt={item.name} loading="lazy" />
+                        ) : (
+                          <div className="picker-poster-fallback">No image</div>
+                        )}
+                        <span className="picker-card-name">{item.name}</span>
+                        {isSelected && <span className="picker-check">✓</span>}
+                      </button>
+                    )
+                  })}
               </div>
               <div className="picker-footer">
                 <button type="button" className="picker-done-btn" onClick={() => setIsPickerOpen(false)}>

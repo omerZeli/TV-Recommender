@@ -27,7 +27,7 @@
   background: #fff;
   border-radius: 1rem;
   width: min(640px, 92vw);
-  max-height: 80vh;
+  height: 80vh;
   display: flex;
   flex-direction: column;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
@@ -60,6 +60,35 @@
   margin: 0.4rem 1.5rem 0;
   color: #666;
   font-size: 0.9rem;
+}
+
+.picker-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem 0;
+}
+
+.picker-search-bar input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d0cce0;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.picker-search-bar input:focus {
+  border-color: #667eea;
+}
+
+.picker-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: #999;
+  font-size: 0.9rem;
+  padding: 1.5rem 0;
 }
 
 .picker-grid {
