@@ -252,14 +252,19 @@ export class TvService {
       searchParams.append('vote_average.gte', '5');
     }
     if (!searchParams.has('vote_count.gte')) {
-      searchParams.append('vote_count.gte', '30');
+      // Use a lower threshold for non-English / regional content to avoid
+      // filtering out most shows that simply have fewer international votes.
+      const isRegionalQuery =
+        (searchParams.has('with_origin_country') &&
+          searchParams.get('with_origin_country')?.toUpperCase() !== 'US') ||
+        (searchParams.has('with_original_language') &&
+          searchParams.get('with_original_language') !== 'en');
+      searchParams.append('vote_count.gte', isRegionalQuery ? '10' : '30');
     }
     if (!searchParams.has('include_adult')) {
       searchParams.append('include_adult', 'false');
     }
-    if (!searchParams.has('language')) {
-      searchParams.append('language', 'en-US');
-    }
+    // Do not default language — let TMDB use its own default or respect the LLM-provided value
     if (!searchParams.has('page')) {
       searchParams.append('page', '1');
     }

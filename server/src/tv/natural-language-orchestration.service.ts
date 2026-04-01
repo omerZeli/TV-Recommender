@@ -748,9 +748,11 @@ Rules:
     const discoverParams: Record<string, any> = {};
     console.log('[orchestrate] Starting ID resolution for parsed params...');
 
-    // --- Watch region (needed early for provider resolution) ---
+    // --- Watch region (only relevant when filtering by watch providers) ---
     const watchRegion = parsedParams.watch_region || 'US';
-    discoverParams.watch_region = watchRegion;
+    if (parsedParams.with_watch_providers || parsedParams.without_watch_providers) {
+      discoverParams.watch_region = watchRegion;
+    }
 
     // --- Genres ---
     if (parsedParams.with_genres) {
