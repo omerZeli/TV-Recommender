@@ -218,31 +218,46 @@ export function PreferencesPage() {
           <p>Use natural language and we will find matching shows.</p>
         </header>
 
-        <form className="search-bar" onSubmit={handleSearchWithNaturalLanguage}>
-          <input
-            type="text"
+        <form className="pref-form" onSubmit={handleSearchWithNaturalLanguage}>
+          <textarea
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             aria-label="Natural language TV preferences"
+            rows={7}
           />
-          <button type="submit" disabled={isLoadingSearch}>
-            {isLoadingSearch ? 'Searching...' : 'Search'}
-          </button>
-        </form>
 
-        {watchlistItems.length > 0 && (
-          <div className="reference-picker-trigger" style={{ padding: '0 2rem', marginBottom: '1rem' }}>
-            <button
-              type="button"
-              className="reference-picker-btn"
-              onClick={() => setIsPickerOpen(true)}
-            >
-              {selectedReferenceIds.size > 0
-                ? `${selectedReferenceIds.size} show${selectedReferenceIds.size > 1 ? 's' : ''} selected as reference`
-                : 'Select shows from watchlist as reference'}
-            </button>
+          <div className="pref-form-actions">
+            {watchlistItems.length > 0 && (
+              <button
+                type="button"
+                className="reference-picker-btn"
+                onClick={() => setIsPickerOpen(true)}
+              >
+                {selectedReferenceIds.size > 0
+                  ? `${selectedReferenceIds.size} reference show${selectedReferenceIds.size > 1 ? 's' : ''}`
+                  : 'Select reference shows'}
+              </button>
+            )}
+
+            <div className="pref-form-right">
+              {(searchQuery.trim() || selectedReferenceIds.size > 0) && (
+                <button
+                  type="button"
+                  className="pref-clear-btn"
+                  onClick={() => {
+                    setSearchQuery('')
+                    setSelectedReferenceIds(new Set())
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+              <button type="submit" className="pref-submit-btn" disabled={isLoadingSearch}>
+                {isLoadingSearch ? 'Searching...' : 'Search'}
+              </button>
+            </div>
           </div>
-        )}
+        </form>
 
         {isPickerOpen && (
           <div className="picker-overlay" onClick={() => setIsPickerOpen(false)}>
@@ -296,6 +311,11 @@ export function PreferencesPage() {
                   })}
               </div>
               <div className="picker-footer">
+                {selectedReferenceIds.size > 0 && (
+                  <button type="button" className="picker-clear-btn" onClick={() => setSelectedReferenceIds(new Set())}>
+                    Clear all
+                  </button>
+                )}
                 <button type="button" className="picker-done-btn" onClick={() => setIsPickerOpen(false)}>
                   Done {selectedReferenceIds.size > 0 && `(${selectedReferenceIds.size})`}
                 </button>
