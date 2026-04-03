@@ -394,6 +394,11 @@ KEYWORD HANDLING — thematic_keyword_groups (IMPORTANT):
 - TMDB LOGIC: Different array elements are treated as REQUIRED (AND). Pipes (|) inside a single string are treated as OPTIONAL (OR).
 - RULE 1 (Split Distinct Pillars): If a show's identity is a mix of two DISTINCT concepts (e.g., "business/wealth" AND "family"), you MUST put them in separate elements. DO NOT group them with a pipe, or TMDB will return wrong shows.
 - RULE 2 (Group Synonyms): If concepts are highly similar synonyms (e.g., "friends", "sitcom", "roommates"), group them TOGETHER in Element [0] using pipes.
+- RULE 3 (Hyponym/Sub-type Expansion): If the user asks for a broad generic category (e.g., "sports", "hospital", "monster", "police"), do NOT just use abstract synonyms. You MUST explicitly generate specific sub-types (hyponyms) separated by pipes in Element [0].
+  - Example for 'sports': "sports|football|basketball|tennis|baseball"
+  - Example for 'hospital': "hospital|clinic|medical center|ER|doctor"
+  - Example for 'monster': "monster|vampire|werewolf|zombie|alien"
+  This is STRICTLY REQUIRED because the TMDB database relies on highly specific tags. If a user asks for a broad physical location or concept, list its most common specific variations.
 - CRITICAL ORDERING BY UNIQUENESS (This dictates fallback success):
   - Element [0] MUST be the MOST UNIQUE, SPECIFIC, and DEFINING core pillar (e.g., "media tycoon|businessman|white collar criminal"). Never put broad/generic terms like "family" or "relationships" in Element [0].
   - Element [1] = The broader/secondary core pillar (e.g., "dysfunctional family").

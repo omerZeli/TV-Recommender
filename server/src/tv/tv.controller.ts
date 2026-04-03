@@ -81,13 +81,9 @@ export class TvController {
     }
 
     // Merge reference data into params (uses thematic grouping for keywords)
-    let mergedParams: Record<string, any> = llmParams;
-    let keywordThemes: string[] = [];
-    if (enrichedShows?.length) {
-      const mergeResult = await this.nlService.mergeEnrichedShowsIntoParams(llmParams, enrichedShows);
-      mergedParams = mergeResult.params;
-      keywordThemes = mergeResult.keywordThemes;
-    }
+    const mergeResult = await this.nlService.mergeEnrichedShowsIntoParams(llmParams, enrichedShows || []);
+    let mergedParams: Record<string, any> = mergeResult.params;
+    let keywordThemes: string[] = mergeResult.keywordThemes;
     log('Merged params:', JSON.stringify(mergedParams, null, 2));
     if (keywordThemes.length > 0) {
       log(`Keyword themes (${keywordThemes.length}):`, keywordThemes);
