@@ -5,6 +5,7 @@ interface User {
   id: number
   email: string
   name: string
+  country?: string
 }
 
 interface AuthContextType {
@@ -13,10 +14,10 @@ interface AuthContextType {
   isLoading: boolean
   error: string | null
   login: (email: string, password: string) => Promise<void>
-  register: (name: string, email: string, password: string) => Promise<void>
+  register: (name: string, email: string, password: string, country?: string) => Promise<void>
   logout: () => void
   clearError: () => void
-  updateUser: (data: { name?: string; email?: string; password?: string }) => Promise<void>
+  updateUser: (data: { name?: string; email?: string; password?: string; country?: string }) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -96,14 +97,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const register = async (name: string, email: string, password: string) => {
+  const register = async (name: string, email: string, password: string, country?: string) => {
     setIsLoading(true)
     setError(null)
     try {
       const response = await fetch(`${API_BASE_URL}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name, email, password, country }),
       })
 
       if (!response.ok) {
@@ -136,7 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null)
   }
 
-  const updateUser = async (data: { name?: string; email?: string; password?: string }) => {
+  const updateUser = async (data: { name?: string; email?: string; password?: string; country?: string }) => {
     if (!token) throw new Error('Not authenticated')
     const response = await fetch(`${API_BASE_URL}/auth/me`, {
       method: 'PATCH',

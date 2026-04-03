@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
+import countryList from 'react-select-country-list'
 import { useAuth } from '../context/AuthContext'
 import { AppHeader } from '../components/AppHeader'
 import type { TmdbTvDetails, TmdbTvResult } from '../types/tv'
@@ -34,7 +35,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000
 export function ShowDetailsPage() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { token } = useAuth()
+  const { token, user } = useAuth()
   const [isLoadingDetails, setIsLoadingDetails] = useState(false)
   const [isInWatchlist, setIsInWatchlist] = useState(false)
   const [isWatched, setIsWatched] = useState(false)
@@ -257,16 +258,40 @@ export function ShowDetailsPage() {
     }
   }
 
-  const providerNames = useMemo(() => {
-    const regionData = details?.['watch/providers']?.results?.['US']
-    if (!regionData) return []
-    const all = [
-      ...(regionData.flatrate ?? []),
-      ...(regionData.free ?? []),
-      ...(regionData.ads ?? []),
-    ]
-    return [...new Set(all.map((p) => p.provider_name))]
-  }, [details])
+  const userRegion = useMemo(() => {
+    if (user?.country) {
+      const code = countryList().getValue(user.country)
+      if (code) return code.toUpperCase()
+    }
+    return 'US'
+  }, [user?.country])
+
+  const watchProviderInfo = useMemo(() => {
+    const getProviders = (region: string) => {
+      const regionData = details?.['watch/providers']?.results?.[region]
+      if (!regionData) return []
+      const all = [
+        ...(regionData.flatrate ?? []),
+        ...(regionData.free ?? []),
+        ...(regionData.ads ?? []),
+      ]
+      return [...new Set(all.map((p) => p.provider_name))]
+    }
+
+    const userProviders = getProviders(userRegion)
+    if (userProviders.length > 0) {
+      return { names: userProviders, isFallback: false }
+    }
+
+    if (userRegion !== 'US') {
+      const usProviders = getProviders('US')
+      if (usProviders.length > 0) {
+        return { names: usProviders, isFallback: true }
+      }
+    }
+
+    return { names: [] as string[], isFallback: false }
+  }, [details, userRegion])
 
   const youtubeVideos = useMemo(() => {
     const allVideos = details?.videos?.results ?? []
@@ -416,10 +441,15 @@ export function ShowDetailsPage() {
                 </div>
               )}
 
-              {providerNames.length > 0 && (
+              {watchProviderInfo.names.length > 0 && (
                 <div className="sdp-meta-item">
                   <span className="sdp-meta-label">Watch On</span>
-                  <span className="sdp-meta-value">{providerNames[0]}</span>
+                  <span className="sdp-meta-value">
+                    {watchProviderInfo.names[0]}
+                    {watchProviderInfo.isFallback && (
+                      <span style={{ fontSize: '0.75em', color: '#888', marginLeft: '4px' }}>(US)</span>
+                    )}
+                  </span>
                 </div>
               )}
             </div>

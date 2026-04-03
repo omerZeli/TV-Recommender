@@ -16,6 +16,10 @@ export class NaturalLanguageSearchDto {
   query?: string;
 
   @IsOptional()
+  @IsString()
+  watchRegion?: string;
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ReferenceShowDto)

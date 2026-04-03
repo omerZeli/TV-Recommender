@@ -411,7 +411,7 @@ Generate a broader with_keywords expression.`;
    * Calls Groq API to brainstorm candidate TV show titles and extract hard filters.
    * Returns { hard_filters, candidate_titles } for the Title-First architecture.
    */
-  async parseWithLlm(query: string, referenceShows: string[] = []): Promise<LlmTitleResponse> {
+  async parseWithLlm(query: string, referenceShows: string[] = [], defaultRegion: string = 'US'): Promise<LlmTitleResponse> {
     const systemPrompt = `You are a TV show recommendation engine. Understand the user's semantic request and brainstorm EXACT TV show titles that match perfectly.
 
 If reference shows are provided, your recommended candidate titles MUST be highly similar to them in tone, genre, vibe, and audience appeal.
@@ -420,7 +420,7 @@ OUTPUT JSON FORMAT:
 {
   "hard_filters": {
     "with_watch_providers": "String name of streaming service if requested. Null if none.",
-    "watch_region": "2-letter country code (e.g., 'IL', 'US'). Default to 'US'.",
+    "watch_region": "2-letter country code (e.g., 'IL', 'US'). Default to '${defaultRegion}' unless the user specifies otherwise.",
     "with_origin_country": "2-letter ISO country code. Null if none.",
     "with_original_language": "2-letter ISO language code. Null if none.",
     "without_genres": "Array of official TMDB genres to EXCLUDE. Empty if none.",

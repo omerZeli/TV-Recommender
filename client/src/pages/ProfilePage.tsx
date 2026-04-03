@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { CountrySelect } from '../components/CountrySelect'
 import styles from './Auth.module.css'
 
 export function ProfilePage() {
@@ -8,6 +9,7 @@ export function ProfilePage() {
   const navigate = useNavigate()
   const [name, setName] = useState(user?.name ?? '')
   const [email, setEmail] = useState(user?.email ?? '')
+  const [country, setCountry] = useState(user?.country ?? '')
   const [password, setPassword] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -19,10 +21,11 @@ export function ProfilePage() {
     setSuccess(false)
     setIsSaving(true)
 
-    const data: { name?: string; email?: string; password?: string } = {}
+    const data: { name?: string; email?: string; password?: string; country?: string } = {}
     if (name !== user?.name) data.name = name
     if (email !== user?.email) data.email = email
     if (password) data.password = password
+    if (country !== (user?.country ?? '')) data.country = country
 
     if (Object.keys(data).length === 0) {
       setIsSaving(false)
@@ -75,6 +78,16 @@ export function ProfilePage() {
               onChange={(e) => setEmail(e.target.value)}
               disabled={isSaving}
               required
+            />
+          </div>
+
+          <div className={styles.formGroup}>
+            <label htmlFor="profile-country">Country</label>
+            <CountrySelect
+              id="profile-country"
+              value={country}
+              onChange={setCountry}
+              isDisabled={isSaving}
             />
           </div>
 

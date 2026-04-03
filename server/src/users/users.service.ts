@@ -13,14 +13,14 @@ export class UsersService {
     private readonly usersRepo: Repository<User>,
   ) {}
 
-  async create(name: string, email: string, password: string): Promise<User> {
+  async create(name: string, email: string, password: string, country?: string): Promise<User> {
     const existing = await this.usersRepo.findOneBy({ email });
     if (existing) {
       throw new ConflictException('Email already registered');
     }
 
     const hashed = await bcrypt.hash(password, SALT_ROUNDS);
-    const user = this.usersRepo.create({ name, email, password: hashed });
+    const user = this.usersRepo.create({ name, email, password: hashed, country });
     return this.usersRepo.save(user);
   }
 
@@ -40,7 +40,7 @@ export class UsersService {
 
   async update(
     id: number,
-    data: { name?: string; email?: string; password?: string },
+    data: { name?: string; email?: string; password?: string; country?: string },
   ): Promise<User> {
     const user = await this.findById(id);
 
@@ -52,6 +52,7 @@ export class UsersService {
 
     if (data.name) user.name = data.name;
     if (data.password) user.password = await bcrypt.hash(data.password, SALT_ROUNDS);
+    if (data.country !== undefined) user.country = data.country;
 
     return this.usersRepo.save(user);
   }

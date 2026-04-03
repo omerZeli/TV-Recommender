@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate } from 'react-router-dom'
+import { CountrySelect } from '../components/CountrySelect'
 import styles from './Auth.module.css'
 
 export function Register() {
@@ -8,6 +9,7 @@ export function Register() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [country, setCountry] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
   const { register, isLoading, error, clearError } = useAuth()
   const navigate = useNavigate()
@@ -28,7 +30,7 @@ export function Register() {
     }
 
     try {
-      await register(name, email, password)
+      await register(name, email, password, country || undefined)
       navigate('/')
     } catch (err) {
       console.error('Registration error:', err)
@@ -68,6 +70,16 @@ export function Register() {
               onChange={(e) => setEmail(e.target.value)}
               required
               disabled={isLoading}
+            />
+          </div>
+
+          <div className={styles.formGroup}>
+            <label htmlFor="country">Country</label>
+            <CountrySelect
+              id="country"
+              value={country}
+              onChange={setCountry}
+              isDisabled={isLoading}
             />
           </div>
 

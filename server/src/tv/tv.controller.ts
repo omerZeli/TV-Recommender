@@ -24,10 +24,11 @@ export class TvController {
     const targetCount = 20;
     const requestId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     const query = dto.query?.trim() || '';
+    const defaultRegion = dto.watchRegion || 'US';
     const log = (msg: string, ...args: any[]) => console.log(`[discover-natural][${requestId}] ${msg}`, ...args);
 
     log('=== NEW REQUEST (Title-First) ===');
-    log(`Query: "${query}"`);
+    log(`Query: "${query}", Default region: ${defaultRegion}`);
 
     const referenceNames = dto.referenceShows?.map(show => show.name) || [];
 
@@ -41,7 +42,7 @@ export class TvController {
     if (referenceNames.length > 0) {
       log(`Included Reference Shows: ${referenceNames.join(', ')}`);
     }
-    const llmResponse = await this.nlService.parseWithLlm(query, referenceNames);
+    const llmResponse = await this.nlService.parseWithLlm(query, referenceNames, defaultRegion);
     const { hard_filters, candidate_titles } = llmResponse as any;
     log(`LLM brainstormed ${candidate_titles?.length || 0} candidates.`);
 
@@ -57,8 +58,9 @@ export class TvController {
     const resolutionPromises: Promise<void>[] = [];
 
     if (hard_filters?.with_watch_providers) {
+      const filtersWithRegion = { ...hard_filters, watch_region: hard_filters.watch_region || defaultRegion };
       resolutionPromises.push(
-        this.nlService.resolveParsedParams(hard_filters).then(discoverParams => {
+        this.nlService.resolveParsedParams(filtersWithRegion).then(discoverParams => {
           if (discoverParams.with_watch_providers) {
             requiredProviderIds = discoverParams.with_watch_providers.split('|').map(Number);
           }
@@ -80,6 +82,7 @@ export class TvController {
     // Pass the enriched hard_filters object
     const validationFilters = {
       ...hard_filters,
+      watch_region: hard_filters?.watch_region || defaultRegion,
       requiredProviderIds,
       excludedGenreIds,
     };

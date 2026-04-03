@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { FormEvent } from 'react'
+import countryList from 'react-select-country-list'
 import { useAuth } from '../context/AuthContext'
 import { AppHeader } from '../components/AppHeader'
 import type { TmdbTvResult } from '../types/tv'
@@ -43,8 +44,16 @@ export const getInitialPrefState = (): { searchQuery: string; hasSearched: boole
 }
 
 export function PreferencesPage() {
-  const { token } = useAuth()
+  const { token, user } = useAuth()
   const navigate = useNavigate()
+
+  const userRegion = useMemo(() => {
+    if (user?.country) {
+      const code = countryList().getValue(user.country)
+      if (code) return code.toUpperCase()
+    }
+    return 'US'
+  }, [user?.country])
 
   const initialPrefState = getInitialPrefState()
 
@@ -139,6 +148,7 @@ export function PreferencesPage() {
         },
         body: JSON.stringify({
           query: searchQuery,
+          watchRegion: userRegion,
           referenceShows: selectedReferenceIds.size > 0
             ? watchlistItems
                 .filter((item) => selectedReferenceIds.has(item.id))

@@ -10,8 +10,8 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  async register(name: string, email: string, password: string) {
-    const user = await this.usersService.create(name, email, password);
+  async register(name: string, email: string, password: string, country?: string) {
+    const user = await this.usersService.create(name, email, password, country);
     return this.signToken(user.id, user.email);
   }
 
@@ -33,7 +33,7 @@ export class AuthService {
 
   async updateProfile(
     userId: number,
-    data: { name?: string; email?: string; password?: string },
+    data: { name?: string; email?: string; password?: string; country?: string },
   ) {
     return this.usersService.update(userId, data);
   }
