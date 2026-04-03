@@ -22,15 +22,120 @@
 
 🔍 **Search** — Find TV shows by name using the TMDB database
 
-🤖 **AI Preferences** — Describe what you're in the mood for in plain English and get smart recommendations powered by Groq LLM (Llama 3.3)
+🤖 **AI Recommendations ** — Describe what you're in the mood for in plain English and get smart recommendations powered by Groq LLM + TMDB deep validation
 
 📺 **Watchlist** — Save shows, mark them as watched, and manage your personal list
 
-📋 **Reference-Based Discovery** — Select shows from your watchlist as taste references and the AI finds similar content
+📋 **Reference-Based Discovery** — Select shows from your watchlist as taste references and the AI finds similar content (works even without a text query)
 
 📄 **Show Details** — View cast, trailers, keywords, seasons, and more for any show
 
 🔐 **Authentication** — JWT-based registration and login with secure password hashing
+
+---
+
+## AI Recommendation Architecture — Title-First Pipeline
+
+The natural language search (`POST /api/tv/discover-natural`) uses a **Title-First** architecture. Instead of translating a user query into abstract TMDB filter parameters, the system asks the LLM to brainstorm real show titles, then uses TMDB as a strict fact-checker.
+
+### Pipeline Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         USER REQUEST                                │
+│  query: "funny sitcoms on Netflix"                                  │
+│  referenceShows: [{ name: "The Office", tmdb_id: 2316 }]           │
+└──────────────────────────┬──────────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    STEP 1 — LLM BRAINSTORM                          │
+│  Groq (Llama 3.3 70B) receives the query + reference show names.    │
+│  Returns structured JSON:                                           │
+│    • hard_filters (provider, region, language, country, genres,      │
+│      year range, networks, companies, runtime, status)              │
+│    • candidate_titles (30–40 real TV show titles with years)        │
+│                                                                     │
+│  Key prompt rules:                                                  │
+│    • PLATFORM AWARENESS — bias toward platform catalog              │
+│    • SEPARATE REGION FROM CONTENT — "Netflix Israel" ≠ Israeli shows│
+└──────────────────────────┬──────────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│               STEP 2 — RESOLVE FILTER IDs (parallel)                │
+│  Provider names → TMDB provider IDs    ┐                            │
+│  Genre names    → TMDB genre IDs       ├─ via Promise.all()        │
+│                                        ┘                            │
+└──────────────────────────┬──────────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│          STEP 3 — TMDB SEARCH + FULL DETAILS (2-phase fetch)        │
+│                                                                     │
+│  Phase A: Title → ID                                                │
+│    search/tv?query=<title>  →  extract first result ID              │
+│    (cached in titleToId map)                                        │
+│                                                                     │
+│  Phase B: ID → Full Object + Providers (single call)                │
+│    tv/{id}?append_to_response=watch/providers                       │
+│    (cached in fullShows map)                                        │
+│                                                                     │
+│  Both phases run concurrently across all titles.                    │
+└──────────────────────────┬──────────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│              STEP 4 — RUTHLESS HARD-FACT VALIDATION                 │
+│  Each full TMDB object is checked against ALL hard_filters:         │
+│                                                                     │
+│    ✓ Origin country          ✓ Original language                    │
+│    ✓ Excluded genres         ✓ Year range (min/max)                 │
+│    ✓ Show status             ✓ Episode runtime (min/max)            │
+│    ✓ Networks (include/exclude)                                     │
+│    ✓ Production companies (include/exclude)                         │
+│    ✓ Watch providers (flatrate/rent/buy per region)                 │
+│                                                                     │
+│  Shows that fail ANY check are dropped.                             │
+└──────────────────────────┬──────────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                STEP 5 — PAYLOAD TRIMMING                            │
+│  Full TMDB objects are mapped to a lightweight shape:               │
+│    id, name, overview, poster_path, backdrop_path,                  │
+│    first_air_date, vote_average, genre_ids,                         │
+│    origin_country, original_language, watch/providers               │
+│                                                                     │
+│  Top 20 results returned to the client.                             │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Caching Strategy
+
+The service maintains an in-memory `IdCache` that eliminates redundant TMDB API calls across requests:
+
+| Cache | Key | Value | Purpose |
+|-------|-----|-------|---------|
+| `titleToId` | lowercase title string | TMDB show ID | Skip `search/tv` for known titles |
+| `fullShows` | TMDB show ID | Full details + providers object | Skip `tv/{id}?append_to_response` for known IDs |
+| `genres` | genre name | genre ID | Fetched once, reused forever |
+| `providers` | `REGION:name` | provider ID | Fetched once per region |
+| `keywords` | keyword name | keyword ID | Accumulated over time |
+
+This means popular shows like "Breaking Bad" or "The Office" cost zero API calls on repeat queries.
+
+### Input Modes
+
+The pipeline supports three input modes:
+
+| Mode | query | referenceShows | Behavior |
+|------|-------|----------------|----------|
+| Text only | `"dark sci-fi"` | `[]` | LLM brainstorms from the text description |
+| Text + References | `"on Netflix"` | `[The Office, Parks and Rec]` | LLM uses references as stylistic anchors while obeying the text constraints |
+| References only | `""` | `[Breaking Bad, Ozark]` | LLM brainstorms exclusively from the reference shows' tone and genre |
+
+---
 
 ## Tech Stack
 

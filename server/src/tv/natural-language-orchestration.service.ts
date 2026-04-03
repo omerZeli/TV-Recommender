@@ -19,6 +19,8 @@ interface IdCache {
   /** Tracks whether the full static list has been fetched and cached */
   genresFetched: boolean;
   providersFetched: Map<string, boolean>;
+  fullShows: Map<number, any>;
+  titleToId: Map<string, number>;
 }
 
 export interface EnrichedReferenceShow {
@@ -35,6 +37,26 @@ export interface MergeResult {
   keywordThemes: string[];
 }
 
+export interface LlmTitleResponse {
+  hard_filters: {
+    with_watch_providers?: string | null;
+    watch_region?: string;
+    with_origin_country?: string | null;
+    with_original_language?: string | null;
+    without_genres?: string[];
+    min_year?: number | null;
+    max_year?: number | null;
+    with_networks?: string[];
+    without_networks?: string[];
+    with_companies?: string[];
+    without_companies?: string[];
+    min_runtime?: number | null;
+    max_runtime?: number | null;
+    with_status?: string[];
+  };
+  candidate_titles: string[];
+}
+
 @Injectable()
 export class NaturalLanguageOrchestrationService {
   private idCache: IdCache = {
@@ -44,6 +66,8 @@ export class NaturalLanguageOrchestrationService {
     keywords: new Map(),
     genresFetched: false,
     providersFetched: new Map(),
+    fullShows: new Map(),
+    titleToId: new Map(),
   };
 
   constructor(
@@ -340,147 +364,108 @@ Generate a broader with_keywords expression.`;
   }
 
   /**
-   * Calls Groq API to parse natural language and extract TV show parameters
-   * Returns a JSON-parseable string with discovered parameters
+   * Low-level LLM call wrapper for Groq API.
    */
-  async parseWithLlm(query: string, enrichedShows?: EnrichedReferenceShow[]): Promise<ParsedDiscoverParams> {
+  private async callLlmApi(
+    prompt: string,
+    options: { temperature?: number; max_tokens?: number; systemPrompt?: string } = {},
+  ): Promise<string> {
     const groqApiKey = this.getGroqApiKey();
     const groqModel = this.getGroqModel();
 
-    const systemPrompt = `You are a TV show search parameter extractor.
-Your job is to parse natural language TV show preferences and extract TMDB /discover/tv parameters.
-Return ONLY valid JSON (no markdown, no code blocks). All fields are optional — only include what the user actually mentioned.
+    const messages: Array<{ role: string; content: string }> = [];
+    if (options.systemPrompt) {
+      messages.push({ role: 'system', content: options.systemPrompt });
+    }
+    messages.push({ role: 'user', content: prompt });
 
-Available fields:
-{
-  "with_genres":                  "genre names; use comma for AND, pipe for OR",
-  "without_genres":               "excluded genre names; use comma for AND, pipe for OR",
-  "with_networks":                "broadcast network names (not streaming); use comma for AND, pipe for OR",
-  "with_companies":               "production company names; use comma for AND, pipe for OR",
-  "without_companies":            "excluded production company names; use comma for AND, pipe for OR",
-  "with_watch_providers":         "streaming service names; use comma for AND, pipe for OR",
-  "without_watch_providers":      "excluded streaming services; use comma for AND, pipe for OR",
-  "with_watch_monetization_types":"pipe-separated monetization types: flatrate|free|ads|rent|buy",
-  "without_keywords":             "excluded keywords; use comma for AND, pipe for OR",
-  "with_type":                    "show type 0=Documentary,1=News,2=Miniseries,3=Reality,4=Scripted,5=TalkShow,6=Video; comma=AND, pipe=OR",
-  "with_status":                  "status 0=Returning,1=Planned,2=InProduction,3=Ended,4=Cancelled,5=Pilot; comma=AND, pipe=OR",
-  "with_original_language":       "ISO 639-1 code, e.g. 'en','es','ko','ja'",
-  "with_origin_country":          "ISO 3166-1 code, e.g. 'US','GB','KR'",
-  "language":                     "response language, default 'en-US'",
-  "watch_region":                 "ISO 3166-1 alpha-2 code for watch provider filtering; convert country names to codes (e.g. 'Israel' -> 'IL', 'United Kingdom' -> 'GB', 'United States' -> 'US')",
-  "timezone":                     "timezone string, e.g. 'America/New_York'",
-  "with_runtime_gte":             30,
-  "with_runtime_lte":             90,
-  "vote_average_gte":             6.5,
-  "vote_average_lte":             10,
-  "vote_count_gte":               100,
-  "vote_count_lte":               50000,
-  "first_air_date_year":          2020,
-  "first_air_date_gte":           "YYYY-MM-DD",
-  "first_air_date_lte":           "YYYY-MM-DD",
-  "air_date_gte":                 "YYYY-MM-DD",
-  "air_date_lte":                 "YYYY-MM-DD",
-  "include_adult":                false,
-  "include_null_first_air_dates": false,
-  "screened_theatrically":        false,
-  "sort_by":                      "popularity.desc (options: popularity.asc/desc, vote_average.asc/desc, vote_count.asc/desc, first_air_date.asc/desc, name.asc/desc)",
-  "page":                         1,
-  "thematic_keyword_groups":      ["theme1_kw1|theme1_kw2", "theme2_kw1|theme2_kw2", "theme3_kw1"]
-}
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${groqApiKey}`,
+      },
+      body: JSON.stringify({
+        model: groqModel,
+        messages,
+        temperature: options.temperature ?? 0.3,
+        max_tokens: options.max_tokens ?? 500,
+      }),
+    });
 
-KEYWORD HANDLING — thematic_keyword_groups (IMPORTANT):
-- Do NOT use "with_keywords". Instead, output ALL keyword descriptors in "thematic_keyword_groups".
-- Group all relevant keywords into exactly 2 to 4 thematic clusters.
-- TMDB LOGIC: Different array elements are treated as REQUIRED (AND). Pipes (|) inside a single string are treated as OPTIONAL (OR).
-- RULE 1 (Split Distinct Pillars): If a show's identity is a mix of two DISTINCT concepts (e.g., "business/wealth" AND "family"), you MUST put them in separate elements. DO NOT group them with a pipe, or TMDB will return wrong shows.
-- RULE 2 (Group Synonyms): If concepts are highly similar synonyms (e.g., "friends", "sitcom", "roommates"), group them TOGETHER in Element [0] using pipes.
-- RULE 3 (Hyponym/Sub-type Expansion): If the user asks for a broad generic category (e.g., "sports", "hospital", "monster", "police"), do NOT just use abstract synonyms. You MUST explicitly generate specific sub-types (hyponyms) separated by pipes in Element [0].
-  - Example for 'sports': "sports|football|basketball|tennis|baseball"
-  - Example for 'hospital': "hospital|clinic|medical center|ER|doctor"
-  - Example for 'monster': "monster|vampire|werewolf|zombie|alien"
-  This is STRICTLY REQUIRED because the TMDB database relies on highly specific tags. If a user asks for a broad physical location or concept, list its most common specific variations.
-- CRITICAL ORDERING BY UNIQUENESS (This dictates fallback success):
-  - Element [0] MUST be the MOST UNIQUE, SPECIFIC, and DEFINING core pillar (e.g., "media tycoon|businessman|white collar criminal"). Never put broad/generic terms like "family" or "relationships" in Element [0].
-  - Element [1] = The broader/secondary core pillar (e.g., "dysfunctional family").
-  - Element [Last] = Settings/locations (e.g., "new york city"). MUST come last so they are dropped first.
-- DO NOT split multi-word TMDB keywords into single words (e.g., use "dysfunctional family", never "family|dysfunctional").
-
-Rules:
-- Distinguish with_networks (broadcast: HBO, BBC, AMC) from with_watch_providers (streaming: Netflix, Prime Video, Disney Plus, Apple TV+, Hulu).
-- For multi-value filter fields, encode user intent as follows:
-  - Use comma (,) for AND semantics (user wants all conditions at once), e.g. "drama and thriller" -> "Drama,Thriller".
-  - Use pipe (|) for OR semantics (any of the values is acceptable), e.g. "drama or thriller" -> "Drama|Thriller".
-  - If user says "either", "any", "one of", or clearly expresses alternatives, use pipe.
-  - If user says "both", "all", "must include", "and", use comma.
-- Apply the same comma/pipe rule consistently to: with_genres, without_genres, with_networks, with_companies, without_companies, with_watch_providers, without_watch_providers, without_keywords, with_status, with_type.
-- Do not mix comma and pipe in the same field unless the user explicitly asks for grouped logic.
-- Do NOT invent genres. Only use official TMDB genre names (e.g. Drama, Comedy, Action, Crime, Thriller, Sci-Fi & Fantasy, Animation, Documentary, Reality, Mystery, Family) for with_genres/without_genres. Specific themes, subjects, or professions (e.g. "lawyers", "doctors", "high school", "time travel") are NOT genres — extract them into thematic_keyword_groups instead.
-- Never include comments or extra text — pure JSON only.`;
-
-    let userMessage: string;
-    if (query) {
-      userMessage = `Extract TV show search parameters from this request: "${query}"`;
-    } else {
-      userMessage = `The user did not provide a text query. Instead, they selected reference shows from their watchlist. Analyze the reference shows below and generate search parameters (especially thematic_keyword_groups) based on the overlapping themes, genres, and keywords across these shows.`;
+    if (!response.ok) {
+      const error = await response.json();
+      console.error('Groq API error:', error);
+      throw new BadGatewayException('Failed to call LLM');
     }
 
-    if (enrichedShows && enrichedShows.length > 0) {
-      const showDescriptions = enrichedShows.map((s) => {
-        const parts = [`- "${s.name}"`];
-        if (s.genres.length) parts.push(`  Genres: ${s.genres.join(', ')}`);
-        if (s.keywords.length) parts.push(`  Keywords/Themes: ${s.keywords.slice(0, 10).join(', ')}`);
-        if (s.original_language) parts.push(`  Language: ${s.original_language}`);
-        return parts.join('\n');
-      }).join('\n\n');
-      userMessage += `\n\nThe user selected these shows from their watchlist as reference for what they enjoy. Use their genres, keywords, and language to understand the user's taste and incorporate common patterns into the search parameters. When building thematic_keyword_groups, consider which keywords are shared across multiple reference shows (those should go in Theme 1) vs. niche to a single show (those go last):\n\n${showDescriptions}`;
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new BadGatewayException('Empty response from LLM');
+    }
+    return content;
+  }
+
+  /**
+   * Calls Groq API to brainstorm candidate TV show titles and extract hard filters.
+   * Returns { hard_filters, candidate_titles } for the Title-First architecture.
+   */
+  async parseWithLlm(query: string, referenceShows: string[] = []): Promise<LlmTitleResponse> {
+    const systemPrompt = `You are a TV show recommendation engine. Understand the user's semantic request and brainstorm EXACT TV show titles that match perfectly.
+
+If reference shows are provided, your recommended candidate titles MUST be highly similar to them in tone, genre, vibe, and audience appeal.
+
+OUTPUT JSON FORMAT:
+{
+  "hard_filters": {
+    "with_watch_providers": "String name of streaming service if requested. Null if none.",
+    "watch_region": "2-letter country code (e.g., 'IL', 'US'). Default to 'US'.",
+    "with_origin_country": "2-letter ISO country code. Null if none.",
+    "with_original_language": "2-letter ISO language code. Null if none.",
+    "without_genres": "Array of official TMDB genres to EXCLUDE. Empty if none.",
+    "min_year": "Integer, minimum release year. Null if none.",
+    "max_year": "Integer, maximum release year. Null if none.",
+    "with_networks": "Array of network names to include (e.g., ['HBO', 'AMC']). Empty if none.",
+    "without_networks": "Array of network names to EXCLUDE. Empty if none.",
+    "with_companies": "Array of production company names to include. Empty if none.",
+    "without_companies": "Array of production company names to EXCLUDE. Empty if none.",
+    "min_runtime": "Integer, minimum episode runtime in minutes. Null if none.",
+    "max_runtime": "Integer, maximum episode runtime in minutes (e.g., 30 for sitcoms). Null if none.",
+    "with_status": "Array of exact statuses if requested. Allowed values: ['Returning Series', 'Planned', 'In Production', 'Ended', 'Canceled', 'Pilot']. Empty if none."
+  },
+  "candidate_titles": [
+    "Title of Show 1 (Year)",
+    "... generate EXACTLY 30 to 40 highly relevant titles. Include the release year in parentheses."
+  ]
+}
+
+CRITICAL:
+- PLATFORM AWARENESS: Generate a MASSIVE list (30-40 titles). If a platform is requested, bias heavily toward its known catalog.
+- SEPARATE REGION FROM CONTENT: "Netflix Israel" means global shows available in IL. Do not restrict "with_origin_country" or "with_original_language" unless the user explicitly asks for "Israeli shows" or "Hebrew shows".
+- Output ONLY valid JSON.`;
+
+    let userMessage = '';
+    if (query && referenceShows.length > 0) {
+      userMessage = `Recommend TV shows for this request: "${query}" while using these as a stylistic anchor: ${referenceShows.join(', ')}`;
+    } else if (query) {
+      userMessage = `Recommend TV shows for this request: "${query}"`;
+    } else if (referenceShows.length > 0) {
+      userMessage = `The user didn't provide a text query. Based EXCLUSIVELY on these reference shows, brainstorm 30-40 similar candidates: ${referenceShows.join(', ')}`;
     }
 
     try {
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${groqApiKey}`,
-        },
-        body: JSON.stringify({
-          model: groqModel,
-          messages: [
-            {
-              role: 'system',
-              content: systemPrompt,
-            },
-            {
-              role: 'user',
-              content: userMessage,
-            },
-          ],
-          temperature: 0.3,
-          max_tokens: 500,
-        }),
+      const content = await this.callLlmApi(userMessage, {
+        systemPrompt,
+        temperature: 0.3,
+        max_tokens: 1500,
       });
-
-      if (!response.ok) {
-        const error = await response.json();
-        console.error('Groq API error:', error);
-        console.error('Groq model used:', groqModel);
-        throw new BadGatewayException('Failed to process natural language query with LLM');
-      }
-
-      const data = await response.json();
-      const content = data.choices?.[0]?.message?.content;
-
-      if (!content) {
-        throw new BadGatewayException('Empty response from LLM');
-      }
 
       console.log('[parseWithLlm] LLM raw response:', content);
 
-      // Strip markdown code fences if the LLM wrapped the JSON in ```json ... ```
       const cleaned = content.trim().replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?\s*```$/i, '').trim();
-
-      // Parse the JSON response
-      const parsedParams = JSON.parse(cleaned) as ParsedDiscoverParams;
-      return parsedParams;
+      const parsed = JSON.parse(cleaned) as LlmTitleResponse;
+      return parsed;
     } catch (error) {
       if (error instanceof SyntaxError) {
         console.error('[parseWithLlm] Failed to parse LLM response as JSON:', error);
@@ -491,10 +476,174 @@ Rules:
   }
 
   /**
+   * Resolves human-readable provider names in hard_filters to TMDB IDs.
+   */
+  async resolveParsedParams(hardFilters: Record<string, any>): Promise<Record<string, any>> {
+    const discoverParams: Record<string, any> = {};
+    const watchRegion = hardFilters.watch_region || 'US';
+
+    if (hardFilters.with_watch_providers) {
+      const providerIds = await this.resolveProviderIds(
+        hardFilters.with_watch_providers.split(',').map((p: string) => p.trim()),
+        watchRegion,
+      );
+      if (providerIds.length > 0) discoverParams.with_watch_providers = providerIds.join('|');
+      discoverParams.watch_region = watchRegion;
+      console.log(`[resolveParsedParams] Providers: "${hardFilters.with_watch_providers}" → [${providerIds}]`);
+    }
+
+    return discoverParams;
+  }
+
+  /**
+   * Maps LLM-brainstormed titles to TMDB objects via search, fetches full details
+   * with watch/providers in a single call, then validates against all hard filters.
+   */
+  async resolveAndValidateTitles(
+    titles: string[],
+    filters: any,
+  ): Promise<any[]> {
+    const tmdbToken = this.getTmdbBearerToken();
+    const region = filters.watch_region || 'US';
+
+    // Step 1: Map titles to TMDB IDs concurrently (with cache)
+    const searchPromises = titles.map(async (titleWithYear) => {
+      const cleanTitle = titleWithYear.replace(/\s*\(\d{4}\)\s*$/, '').trim();
+      const cacheKey = cleanTitle.toLowerCase();
+
+      // Fast return from cache
+      if (this.idCache.titleToId.has(cacheKey)) {
+        return this.idCache.titleToId.get(cacheKey);
+      }
+
+      try {
+        const res = await fetch(
+          `https://api.themoviedb.org/3/search/tv?query=${encodeURIComponent(cleanTitle)}&page=1`,
+          { headers: { Authorization: `Bearer ${tmdbToken}`, accept: 'application/json' } },
+        );
+        const data = await res.json();
+        const id = data.results?.[0]?.id || null;
+
+        // Save to cache if found
+        if (id) {
+          this.idCache.titleToId.set(cacheKey, id);
+        }
+        return id;
+      } catch (e) {
+        return null;
+      }
+    });
+
+    const ids = (await Promise.all(searchPromises)).filter(Boolean);
+
+    // Step 2: Fetch Full Details + Providers concurrently for found IDs
+    const detailsPromises = ids.map(async (id) => {
+      // Return from cache if available
+      if (this.idCache.fullShows.has(id)) {
+        return this.idCache.fullShows.get(id);
+      }
+      try {
+        const res = await fetch(
+          `https://api.themoviedb.org/3/tv/${id}?append_to_response=watch/providers`,
+          { headers: { Authorization: `Bearer ${tmdbToken}`, accept: 'application/json' } },
+        );
+        const data = await res.json();
+        // Save to cache if successful
+        if (data && !data.success?.toString().includes('false')) {
+          this.idCache.fullShows.set(id, data);
+        }
+        return data;
+      } catch (e) {
+        return null;
+      }
+    });
+
+    let fullShows = (await Promise.all(detailsPromises)).filter(
+      (show) => show && !show.success?.toString().includes('false'),
+    );
+
+    // Step 3: Ruthless Full-Object Validation
+    fullShows = fullShows.filter((show: any) => {
+      // Origin Country
+      if (filters.with_origin_country && (!show.origin_country || !show.origin_country.includes(filters.with_origin_country.toUpperCase()))) {
+        return false;
+      }
+
+      // Original Language
+      if (filters.with_original_language && show.original_language !== filters.with_original_language.toLowerCase()) {
+        return false;
+      }
+
+      // Excluded Genres (show.genres is an array of objects in Full Details)
+      if (filters.excludedGenreIds?.length > 0) {
+        const hasExcluded = show.genres?.some((g: any) => filters.excludedGenreIds.includes(g.id));
+        if (hasExcluded) return false;
+      }
+
+      // Years
+      const airYear = show.first_air_date ? parseInt(show.first_air_date.substring(0, 4), 10) : null;
+      if (airYear) {
+        if (filters.min_year && airYear < filters.min_year) return false;
+        if (filters.max_year && airYear > filters.max_year) return false;
+      }
+
+      // Status
+      if (filters.with_status?.length > 0 && !filters.with_status.includes(show.status)) {
+        return false;
+      }
+
+      // Runtime (episode_run_time is an array, check average)
+      if (filters.min_runtime || filters.max_runtime) {
+        const runtimes: number[] = show.episode_run_time || [];
+        const avgRuntime = runtimes.length ? runtimes.reduce((a, b) => a + b, 0) / runtimes.length : 0;
+        if (avgRuntime > 0) {
+          if (filters.min_runtime && avgRuntime < filters.min_runtime) return false;
+          if (filters.max_runtime && avgRuntime > filters.max_runtime) return false;
+        }
+      }
+
+      // Networks (WITH and WITHOUT)
+      const networkNames = (show.networks || []).map((n: any) => n.name.toLowerCase());
+      if (filters.with_networks?.length > 0 && !filters.with_networks.some((n: string) => networkNames.includes(n.toLowerCase()))) {
+        return false;
+      }
+      if (filters.without_networks?.length > 0 && filters.without_networks.some((n: string) => networkNames.includes(n.toLowerCase()))) {
+        return false;
+      }
+
+      // Companies (WITH and WITHOUT)
+      const companyNames = (show.production_companies || []).map((c: any) => c.name.toLowerCase());
+      if (filters.with_companies?.length > 0 && !filters.with_companies.some((c: string) => companyNames.includes(c.toLowerCase()))) {
+        return false;
+      }
+      if (filters.without_companies?.length > 0 && filters.without_companies.some((c: string) => companyNames.includes(c.toLowerCase()))) {
+        return false;
+      }
+
+      // Providers
+      if (filters.requiredProviderIds?.length > 0) {
+        const regionData = show['watch/providers']?.results?.[region.toUpperCase()];
+        if (!regionData) return false;
+        const availableIds = [
+          ...(regionData.flatrate || []),
+          ...(regionData.rent || []),
+          ...(regionData.buy || []),
+        ].map((p: any) => p.provider_id);
+        if (!filters.requiredProviderIds.some((id: number) => availableIds.includes(id))) return false;
+      }
+
+      return true;
+    });
+
+    console.log(`[Validation] Shows remaining after deep hard fact checks: ${fullShows.length}`);
+    return fullShows;
+  }
+
+  /**
    * Search TMDB for genre ID by name.
    * Caches the full genre list on first call to avoid repeated API hits.
    */
-  private async resolveGenreIds(genreNames: string[]): Promise<number[]> {
+  async resolveGenreIds(genreNames: string[]): Promise<number[]> {
     // Populate cache on first call
     if (!this.idCache.genresFetched) {
       const tmdbToken = this.getTmdbBearerToken();
@@ -898,18 +1047,4 @@ Rules:
     return discoverParams;
   }
 
-  /**
-   * Full pipeline: parse natural language -> resolve IDs -> return discover params
-   */
-  async processNaturalLanguageQuery(query: string): Promise<Record<string, any>> {
-    // Step 1: Parse with LLM
-    const parsedParams = await this.parseWithLlm(query);
-    console.log('Parsed parameters from LLM:', parsedParams);
-
-    // Step 2: Orchestrate and resolve IDs
-    const discoverParams = await this.orchestrateDiscoverParameters(parsedParams);
-    console.log('Final discover parameters:', discoverParams);
-
-    return discoverParams;
-  }
 }
