@@ -1,0 +1,104 @@
+/* ── User Menu ──────────────────────────────────────────────── */
+.user-menu {
+  position: relative;
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.user-menu-trigger {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 0;
+  border-radius: 0.5rem;
+  transition: background 0.2s;
+  line-height: 1;
+}
+
+.user-menu-trigger:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.user-menu-name {
+  font-size: 0.72rem;
+  font-weight: 600;
+  opacity: 0.9;
+  white-space: nowrap;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1;
+}
+
+/* ── Dropdown ──────────────────────────────────────────────── */
+.user-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  background: #fff;
+  border-radius: 0.75rem;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+  min-width: 200px;
+  z-index: 200;
+  overflow: hidden;
+  animation: userMenuFadeIn 0.15s ease;
+}
+
+@keyframes userMenuFadeIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.user-menu-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 1rem 1rem 0.75rem;
+  color: #4a4060;
+}
+
+.user-menu-header-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #1f1a22;
+}
+
+.user-menu-divider {
+  height: 1px;
+  background: #e8e2db;
+  margin: 0 0.75rem;
+}
+
+.user-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.7rem 1rem;
+  border: none;
+  background: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #3b3340;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.user-menu-item:hover {
+  background: #f5f0eb;
+}
+
+.user-menu-item--danger {
+  color: #a13030;
+}
+
+.user-menu-item--danger:hover {
+  background: #fef0f0;
+}

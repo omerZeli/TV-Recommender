@@ -1,5 +1,10 @@
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import AccountCircleIcon from '@mui/icons-material/AccountCircle'
+import EditIcon from '@mui/icons-material/Edit'
+import LogoutIcon from '@mui/icons-material/Logout'
 import { useAuth } from '../context/AuthContext'
+import './AppHeader.css'
 
 type NavVariant = {
   variant: 'nav'
@@ -14,9 +19,53 @@ type BackVariant = {
 
 type AppHeaderProps = NavVariant | BackVariant
 
-export function AppHeader(props: AppHeaderProps) {
+function UserMenu() {
   const navigate = useNavigate()
   const { user, logout } = useAuth()
+  const [open, setOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  if (!user) return null
+
+  return (
+    <div className="user-menu" ref={menuRef}>
+      <button className="user-menu-trigger" onClick={() => setOpen((v) => !v)} aria-label="User menu">
+        <AccountCircleIcon fontSize="large" />
+        <span className="user-menu-name">{user.name}</span>
+      </button>
+      {open && (
+        <div className="user-menu-dropdown">
+          <div className="user-menu-header">
+            <AccountCircleIcon sx={{ fontSize: 48 }} />
+            <span className="user-menu-header-name">{user.name}</span>
+          </div>
+          <div className="user-menu-divider" />
+          <button className="user-menu-item" onClick={() => { setOpen(false); navigate('/profile') }}>
+            <EditIcon fontSize="small" />
+            Edit Profile
+          </button>
+          <button className="user-menu-item user-menu-item--danger" onClick={() => { setOpen(false); logout() }}>
+            <LogoutIcon fontSize="small" />
+            Logout
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function AppHeader(props: AppHeaderProps) {
+  const navigate = useNavigate()
 
   if (props.variant === 'back') {
     return (
@@ -28,14 +77,7 @@ export function AppHeader(props: AppHeaderProps) {
             </button>
           </div>
           <span className="sdp-site-title">TV Recommender</span>
-          <div className="sdp-user-section">
-            {user && (
-              <>
-                <span className="sdp-user-email" role="button" tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => navigate('/profile')}>{user.name} ✎</span>
-                <button className="sdp-logout-btn" onClick={logout}>Logout</button>
-              </>
-            )}
-          </div>
+          <UserMenu />
         </div>
       </header>
     )
@@ -56,14 +98,7 @@ export function AppHeader(props: AppHeaderProps) {
             Preferences
           </button>
         </div>
-        <div className="user-section">
-          {user && (
-            <>
-              <span className="user-email" role="button" tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => navigate('/profile')}>{user.name} ✎</span>
-              <button className="logout-btn" onClick={logout}>Logout</button>
-            </>
-          )}
-        </div>
+        <UserMenu />
       </div>
     </header>
   )

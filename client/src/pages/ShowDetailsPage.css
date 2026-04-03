@@ -56,49 +56,6 @@
   text-align: center;
 }
 
-.sdp-user-section {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  justify-content: flex-end;
-  min-width: 0;
-  flex: 1;
-}
-
-.sdp-user-email {
-  font-size: 0.9rem;
-  opacity: 0.88;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 200px;
-  border-bottom: 1px dashed rgba(255, 255, 255, 0.4);
-  transition: opacity 0.2s, border-color 0.2s;
-}
-
-.sdp-user-email:hover {
-  opacity: 1;
-  border-bottom-color: rgba(255, 255, 255, 0.8);
-}
-
-.sdp-logout-btn {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  padding: 0.45rem 0.9rem;
-  border-radius: 0.45rem;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 0.88rem;
-  transition: background 0.2s, border-color 0.2s;
-  white-space: nowrap;
-}
-
-.sdp-logout-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
-  border-color: rgba(255, 255, 255, 0.5);
-}
-
 /* ── Backdrop Hero ─────────────────────────────────────────────── */
 .sdp-backdrop {
   width: 100%;
@@ -645,9 +602,5 @@
 @media (max-width: 480px) {
   .sdp-meta-grid {
     grid-template-columns: 1fr 1fr;
-  }
-
-  .sdp-user-email {
-    display: none;
   }
 }
