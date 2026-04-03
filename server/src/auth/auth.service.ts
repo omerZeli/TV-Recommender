@@ -30,4 +30,11 @@ export class AuthService {
     const accessToken = this.jwtService.sign(payload);
     return { accessToken };
   }
+
+  async updateProfile(
+    userId: number,
+    data: { name?: string; email?: string; password?: string },
+  ) {
+    return this.usersService.update(userId, data);
+  }
 }

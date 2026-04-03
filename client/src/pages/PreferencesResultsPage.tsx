@@ -4,6 +4,7 @@ import type { MouseEvent } from 'react'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
 import { useAuth } from '../context/AuthContext'
+import { AppHeader } from '../components/AppHeader'
 import type { TmdbTvResult } from '../types/tv'
 import { formatDateToDDMMYYYY } from '../utils/date'
 import { PREF_STORAGE_KEY } from './PreferencesPage'
@@ -15,7 +16,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w342'
 
 export function PreferencesResultsPage() {
-  const { user, token, logout } = useAuth()
+  const { token } = useAuth()
   const navigate = useNavigate()
 
   const [recommendations, setRecommendations] = useState<TmdbTvResult[]>([])
@@ -179,26 +180,7 @@ export function PreferencesResultsPage() {
 
   return (
     <div className="sdp-root">
-      <header className="sdp-header">
-        <div className="sdp-header-content">
-          <div className="sdp-header-left">
-            <button className="sdp-back-btn" onClick={() => navigate('/preferences')} aria-label="Back to Preferences">
-              ← Back
-            </button>
-          </div>
-          <span className="sdp-site-title">TV Recommender</span>
-          <div className="sdp-user-section">
-            {user && (
-              <>
-                <span className="sdp-user-email">{user.email}</span>
-                <button className="sdp-logout-btn" onClick={logout}>
-                  Logout
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </header>
+      <AppHeader variant="back" onBack={() => navigate('/preferences')} backLabel="Back to Preferences" />
 
       <main className="app">
         <header className="hero">

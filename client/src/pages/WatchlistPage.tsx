@@ -4,6 +4,7 @@ import type { MouseEvent } from 'react'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
 import { useAuth } from '../context/AuthContext'
+import { AppHeader } from '../components/AppHeader'
 import type { TmdbTvResult } from '../types/tv'
 import { formatDateToDDMMYYYY } from '../utils/date'
 import '../TvSearch.css'
@@ -13,7 +14,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w342'
 
 export function WatchlistPage() {
-  const { user, token, logout } = useAuth()
+  const { token } = useAuth()
   const navigate = useNavigate()
   const [items, setItems] = useState<TmdbTvResult[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -160,32 +161,7 @@ export function WatchlistPage() {
 
   return (
     <>
-      <header className="header">
-        <div className="header-content">
-          <h1>TV Recommender</h1>
-          <div className="header-nav-actions">
-            <button className="header-nav-btn" onClick={() => navigate('/')}>
-              Search
-            </button>
-            <button className="header-nav-btn header-nav-btn--active" onClick={() => navigate('/watchlist')}>
-              My Watchlist
-            </button>
-            <button className="header-nav-btn" onClick={() => navigate('/preferences')}>
-              Preferences
-            </button>
-          </div>
-          <div className="user-section">
-            {user && (
-              <>
-                <span className="user-email">{user.email}</span>
-                <button className="logout-btn" onClick={logout}>
-                  Logout
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </header>
+      <AppHeader variant="nav" activePage="watchlist" />
 
       <main className="app">
         <header className="hero">

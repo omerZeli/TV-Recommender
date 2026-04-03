@@ -70,6 +70,14 @@ export type TmdbTvDetails = {
       published_at: string
     }[]
   }
+  'watch/providers'?: {
+    results?: Record<string, {
+      link?: string
+      flatrate?: { provider_id: number; provider_name: string; logo_path: string }[]
+      ads?: { provider_id: number; provider_name: string; logo_path: string }[]
+      free?: { provider_id: number; provider_name: string; logo_path: string }[]
+    }>
+  }
 }
 
 export type TvPreferences = {

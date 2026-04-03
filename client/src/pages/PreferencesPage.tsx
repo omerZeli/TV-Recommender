@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { FormEvent } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { AppHeader } from '../components/AppHeader'
 import type { TmdbTvResult } from '../types/tv'
 import '../TvSearch.css'
 import './PreferencesPage.css'
@@ -42,7 +43,7 @@ export const getInitialPrefState = (): { searchQuery: string; hasSearched: boole
 }
 
 export function PreferencesPage() {
-  const { user, token, logout } = useAuth()
+  const { token } = useAuth()
   const navigate = useNavigate()
 
   const initialPrefState = getInitialPrefState()
@@ -185,32 +186,7 @@ export function PreferencesPage() {
 
   return (
     <>
-      <header className="header">
-        <div className="header-content">
-          <h1>TV Recommender</h1>
-          <div className="header-nav-actions">
-            <button className="header-nav-btn" onClick={() => navigate('/')}>
-              Search
-            </button>
-            <button className="header-nav-btn" onClick={() => navigate('/watchlist')}>
-              My Watchlist
-            </button>
-            <button className="header-nav-btn header-nav-btn--active" onClick={() => navigate('/preferences')}>
-              Preferences
-            </button>
-          </div>
-          <div className="user-section">
-            {user && (
-              <>
-                <span className="user-email">{user.email}</span>
-                <button className="logout-btn" onClick={logout}>
-                  Logout
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </header>
+      <AppHeader variant="nav" activePage="preferences" />
 
       <main className="app">
         <header className="hero">

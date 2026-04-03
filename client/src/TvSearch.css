@@ -54,6 +54,13 @@
 .user-email {
   font-size: 0.95rem;
   opacity: 0.9;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.4);
+  transition: opacity 0.2s, border-color 0.2s;
+}
+
+.user-email:hover {
+  opacity: 1;
+  border-bottom-color: rgba(255, 255, 255, 0.8);
 }
 
 .logout-btn {

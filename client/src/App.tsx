@@ -7,6 +7,7 @@ import { ShowDetailsPage } from './pages/ShowDetailsPage'
 import { WatchlistPage } from './pages/WatchlistPage'
 import { PreferencesPage } from './pages/PreferencesPage'
 import { PreferencesResultsPage } from './pages/PreferencesResultsPage'
+import { ProfilePage } from './pages/ProfilePage'
 
 function AppRoutes() {
   const { token } = useAuth()
@@ -20,6 +21,7 @@ function AppRoutes() {
           <Route path="/preferences" element={<PreferencesPage />} />
           <Route path="/preferences/results" element={<PreferencesResultsPage />} />
           <Route path="/show/:id" element={<ShowDetailsPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </>
       ) : (

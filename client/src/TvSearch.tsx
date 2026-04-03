@@ -5,6 +5,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
 import './TvSearch.css'
 import { useAuth } from './context/AuthContext'
+import { AppHeader } from './components/AppHeader'
 import type { TmdbTvResult } from './types/tv'
 import { formatDateToDDMMYYYY } from './utils/date'
 
@@ -97,7 +98,7 @@ export function TvSearch() {
   const [isAddingShowId, setIsAddingShowId] = useState<number | null>(null)
   const [isRemovingShowId, setIsRemovingShowId] = useState<number | null>(null)
   const [isMarkingWatchedShowId, setIsMarkingWatchedShowId] = useState<number | null>(null)
-  const { user, token, logout } = useAuth()
+  const { token } = useAuth()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -346,32 +347,7 @@ export function TvSearch() {
 
   return (
     <>
-      <header className="header">
-        <div className="header-content">
-          <h1>TV Recommender</h1>
-          <div className="header-nav-actions">
-            <button className="header-nav-btn header-nav-btn--active" onClick={() => navigate('/')}>
-              Search
-            </button>
-            <button className="header-nav-btn" onClick={() => navigate('/watchlist')}>
-              My Watchlist
-            </button>
-            <button className="header-nav-btn" onClick={() => navigate('/preferences')}>
-              Preferences
-            </button>
-          </div>
-          <div className="user-section">
-            {user && (
-              <>
-                <span className="user-email">{user.email}</span>
-                <button className="logout-btn" onClick={logout}>
-                  Logout
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </header>
+      <AppHeader variant="nav" activePage="search" />
 
       <main className="app">
         <header className="hero">

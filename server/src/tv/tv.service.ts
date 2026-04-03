@@ -52,7 +52,7 @@ export class TvService {
 
     const searchParams = new URLSearchParams({
       language: 'en-US',
-      append_to_response: 'videos,keywords,aggregate_credits',
+      append_to_response: 'videos,keywords,aggregate_credits,watch/providers',
     });
 
     const response = await fetch(

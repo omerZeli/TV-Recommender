@@ -72,6 +72,13 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 200px;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.4);
+  transition: opacity 0.2s, border-color 0.2s;
+}
+
+.sdp-user-email:hover {
+  opacity: 1;
+  border-bottom-color: rgba(255, 255, 255, 0.8);
 }
 
 .sdp-logout-btn {
@@ -303,6 +310,10 @@
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 1rem;
+}
+
+.sdp-meta-grid--top {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .sdp-meta-item {

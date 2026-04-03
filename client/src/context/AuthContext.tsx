@@ -16,6 +16,7 @@ interface AuthContextType {
   register: (name: string, email: string, password: string) => Promise<void>
   logout: () => void
   clearError: () => void
+  updateUser: (data: { name?: string; email?: string; password?: string }) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -135,9 +136,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null)
   }
 
+  const updateUser = async (data: { name?: string; email?: string; password?: string }) => {
+    if (!token) throw new Error('Not authenticated')
+    const response = await fetch(`${API_BASE_URL}/auth/me`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(data),
+    })
+    if (!response.ok) {
+      const body = await response.json()
+      throw new Error(body.message || 'Update failed')
+    }
+    const updated = await response.json()
+    setUser(updated)
+  }
+
   return (
     <AuthContext.Provider
-      value={{ user, token, isLoading, error, login, register, logout, clearError }}
+      value={{ user, token, isLoading, error, login, register, logout, clearError, updateUser }}
     >
       {children}
     </AuthContext.Provider>

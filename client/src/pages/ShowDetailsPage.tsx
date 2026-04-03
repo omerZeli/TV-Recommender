@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
 import { useAuth } from '../context/AuthContext'
+import { AppHeader } from '../components/AppHeader'
 import type { TmdbTvDetails, TmdbTvResult } from '../types/tv'
 import { formatDateToDDMMYYYY } from '../utils/date'
 import './ShowDetailsPage.css'
@@ -33,7 +34,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000
 export function ShowDetailsPage() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { user, token, logout } = useAuth()
+  const { token } = useAuth()
   const [isLoadingDetails, setIsLoadingDetails] = useState(false)
   const [isInWatchlist, setIsInWatchlist] = useState(false)
   const [isWatched, setIsWatched] = useState(false)
@@ -256,6 +257,17 @@ export function ShowDetailsPage() {
     }
   }
 
+  const providerNames = useMemo(() => {
+    const regionData = details?.['watch/providers']?.results?.['US']
+    if (!regionData) return []
+    const all = [
+      ...(regionData.flatrate ?? []),
+      ...(regionData.free ?? []),
+      ...(regionData.ads ?? []),
+    ]
+    return [...new Set(all.map((p) => p.provider_name))]
+  }, [details])
+
   const youtubeVideos = useMemo(() => {
     const allVideos = details?.videos?.results ?? []
     return allVideos
@@ -282,26 +294,7 @@ export function ShowDetailsPage() {
 
   return (
     <div className="sdp-root">
-      <header className="sdp-header">
-        <div className="sdp-header-content">
-          <div className="sdp-header-left">
-            <button className="sdp-back-btn" onClick={() => navigate(-1)} aria-label="Go back">
-              ← Back
-            </button>
-          </div>
-          <span className="sdp-site-title">TV Recommender</span>
-          <div className="sdp-user-section">
-            {user && (
-              <>
-                <span className="sdp-user-email">{user.email}</span>
-                <button className="sdp-logout-btn" onClick={logout}>
-                  Logout
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </header>
+      <AppHeader variant="back" onBack={() => navigate(-1)} />
 
       {display.backdrop_path && (
         <div
@@ -394,20 +387,20 @@ export function ShowDetailsPage() {
               {watchlistError && <p className="sdp-watchlist-error">{watchlistError}</p>}
             </div>
 
-            <div className="sdp-meta-grid">
-              <div className="sdp-meta-item sdp-meta-item--medium">
+            <div className="sdp-meta-grid sdp-meta-grid--top">
+              <div className="sdp-meta-item">
                 <span className="sdp-meta-label">First Air Date</span>
                 <span className="sdp-meta-value">{formatDateToDDMMYYYY(display.first_air_date) || 'Unknown'}</span>
               </div>
 
               {details?.last_air_date && (
-                <div className="sdp-meta-item sdp-meta-item--medium">
+                <div className="sdp-meta-item">
                   <span className="sdp-meta-label">Last Air Date</span>
                   <span className="sdp-meta-value">{formatDateToDDMMYYYY(details.last_air_date)}</span>
                 </div>
               )}
 
-              <div className="sdp-meta-item sdp-meta-item--medium">
+              <div className="sdp-meta-item">
                 <span className="sdp-meta-label">Rating</span>
                 <span className="sdp-meta-value sdp-rating">
                   <span className="sdp-star">⭐</span>
@@ -417,12 +410,21 @@ export function ShowDetailsPage() {
               </div>
 
               {details?.networks && details.networks.length > 0 && (
-                <div className="sdp-meta-item sdp-meta-item--medium">
+                <div className="sdp-meta-item">
                   <span className="sdp-meta-label">Network</span>
                   <span className="sdp-meta-value">{details.networks.map((n) => n.name).join(', ')}</span>
                 </div>
               )}
 
+              {providerNames.length > 0 && (
+                <div className="sdp-meta-item">
+                  <span className="sdp-meta-label">Watch On</span>
+                  <span className="sdp-meta-value">{providerNames[0]}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="sdp-meta-grid">
               <div className="sdp-meta-item sdp-meta-item--compact">
                 <span className="sdp-meta-label">Language</span>
                 <span className="sdp-meta-value">{display.original_language.toUpperCase()}</span>

@@ -37,4 +37,22 @@ export class UsersService {
     if (!user) throw new NotFoundException('User not found');
     return user;
   }
+
+  async update(
+    id: number,
+    data: { name?: string; email?: string; password?: string },
+  ): Promise<User> {
+    const user = await this.findById(id);
+
+    if (data.email && data.email !== user.email) {
+      const existing = await this.usersRepo.findOneBy({ email: data.email });
+      if (existing) throw new ConflictException('Email already registered');
+      user.email = data.email;
+    }
+
+    if (data.name) user.name = data.name;
+    if (data.password) user.password = await bcrypt.hash(data.password, SALT_ROUNDS);
+
+    return this.usersRepo.save(user);
+  }
 }
