@@ -21,25 +21,36 @@ const isReloadNavigation = (): boolean => {
 
 let shouldResetPrefStateOnFirstMount = isReloadNavigation()
 
-export const getInitialPrefState = (): { searchQuery: string; hasSearched: boolean; recommendations: TmdbTvResult[]; selectedReferenceIds: number[] } => {
+export const getInitialPrefState = (): {
+  searchQuery: string;
+  hasSearched: boolean;
+  recommendations: TmdbTvResult[];
+  selectedReferenceIds: number[];
+  lastSearchedQuery: string;
+  lastSearchedReferenceIds: number[];
+} => {
+  const empty = { searchQuery: '', hasSearched: false, recommendations: [], selectedReferenceIds: [], lastSearchedQuery: '', lastSearchedReferenceIds: [] }
+
   if (shouldResetPrefStateOnFirstMount) {
     shouldResetPrefStateOnFirstMount = false
     sessionStorage.removeItem(PREF_STORAGE_KEY)
-    return { searchQuery: '', hasSearched: false, recommendations: [], selectedReferenceIds: [] }
+    return empty
   }
 
   try {
     const raw = sessionStorage.getItem(PREF_STORAGE_KEY)
-    if (!raw) return { searchQuery: '', hasSearched: false, recommendations: [], selectedReferenceIds: [] }
+    if (!raw) return empty
     const parsed = JSON.parse(raw)
     return {
       searchQuery: typeof parsed.searchQuery === 'string' ? parsed.searchQuery : '',
       hasSearched: parsed.hasSearched === true,
       recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : [],
       selectedReferenceIds: Array.isArray(parsed.selectedReferenceIds) ? parsed.selectedReferenceIds : [],
+      lastSearchedQuery: typeof parsed.lastSearchedQuery === 'string' ? parsed.lastSearchedQuery : '',
+      lastSearchedReferenceIds: Array.isArray(parsed.lastSearchedReferenceIds) ? parsed.lastSearchedReferenceIds : [],
     }
   } catch {
-    return { searchQuery: '', hasSearched: false, recommendations: [], selectedReferenceIds: [] }
+    return empty
   }
 }
 
@@ -124,8 +135,8 @@ export function PreferencesPage() {
     // Check if query and references are unchanged from last search — if so, show cached results
     if (initialPrefState.recommendations.length > 0) {
       const currentRefIds = Array.from(selectedReferenceIds).sort((a, b) => a - b)
-      const lastRefIds = [...initialPrefState.selectedReferenceIds].sort((a, b) => a - b)
-      const sameQuery = searchQuery === initialPrefState.searchQuery
+      const lastRefIds = [...initialPrefState.lastSearchedReferenceIds].sort((a, b) => a - b)
+      const sameQuery = searchQuery === initialPrefState.lastSearchedQuery
       const sameRefs =
         currentRefIds.length === lastRefIds.length &&
         currentRefIds.every((id, i) => id === lastRefIds[i])
@@ -171,6 +182,9 @@ export function PreferencesPage() {
             hasSearched: true,
             recommendations: results,
             selectedReferenceIds: Array.from(selectedReferenceIds),
+            lastSearchedQuery: searchQuery,
+            lastSearchedReferenceIds: Array.from(selectedReferenceIds),
+            watchRegion: userRegion,
           }),
         )
         navigate('/preferences/results')

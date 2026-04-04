@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { MouseEvent } from 'react'
+import AutorenewIcon from '@mui/icons-material/Autorenew'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
 import { useAuth } from '../context/AuthContext'
@@ -26,6 +27,7 @@ export function PreferencesResultsPage() {
   const [isAddingShowId, setIsAddingShowId] = useState<number | null>(null)
   const [isRemovingShowId, setIsRemovingShowId] = useState<number | null>(null)
   const [isMarkingWatchedShowId, setIsMarkingWatchedShowId] = useState<number | null>(null)
+  const [isResearching, setIsResearching] = useState(false)
 
   // Load results from sessionStorage
   useEffect(() => {
@@ -67,6 +69,64 @@ export function PreferencesResultsPage() {
       fetchWatchlist()
     }
   }, [token])
+
+  const handleSearchAgain = async () => {
+    setIsResearching(true)
+    try {
+      const raw = sessionStorage.getItem(PREF_STORAGE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      const query = parsed.lastSearchedQuery || parsed.searchQuery || ''
+      const refIds: number[] = parsed.lastSearchedReferenceIds || parsed.selectedReferenceIds || []
+
+      // We need reference show names for the API — fetch watchlist to resolve them
+      let referenceShows: { tmdb_id: number; name: string }[] | undefined
+      if (refIds.length > 0 && token) {
+        const wlRes = await fetch(`${API_BASE_URL}/watchlist`, {
+          headers: { accept: 'application/json', Authorization: `Bearer ${token}` },
+        })
+        if (wlRes.ok) {
+          const wlData = await wlRes.json()
+          if (Array.isArray(wlData)) {
+            referenceShows = wlData
+              .filter((item: any) => refIds.includes(item.id))
+              .map((item: any) => ({ tmdb_id: item.id, name: item.name }))
+          }
+        }
+      }
+
+      const response = await fetch(`${API_BASE_URL}/tv/discover-natural`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          query,
+          watchRegion: parsed.watchRegion || 'US',
+          referenceShows: referenceShows && referenceShows.length > 0 ? referenceShows : undefined,
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const results: TmdbTvResult[] = data.results || []
+        setRecommendations(results)
+        sessionStorage.setItem(
+          PREF_STORAGE_KEY,
+          JSON.stringify({
+            ...parsed,
+            recommendations: results,
+            hasSearched: true,
+          }),
+        )
+      }
+    } catch (err) {
+      console.error('Failed to re-search:', err)
+    } finally {
+      setIsResearching(false)
+    }
+  }
 
   const handleAddToWatchlist = async (event: MouseEvent<HTMLButtonElement>, show: TmdbTvResult) => {
     event.stopPropagation()
@@ -183,14 +243,29 @@ export function PreferencesResultsPage() {
       <AppHeader variant="back" onBack={() => navigate('/preferences')} backLabel="Back to Preferences" />
 
       <main className="app">
-        <header className="hero">
+        <header className="hero pref-results-hero">
           <h2>Recommendation Results</h2>
-          {searchQuery.trim() && <p>Results for "{searchQuery.trim()}"</p>}
+          {searchQuery.trim() && (
+            <div className="pref-results-subtitle-row">
+              <p>Results for "{searchQuery.trim()}"</p>
+              <button
+                type="button"
+                className="pref-research-btn"
+                onClick={handleSearchAgain}
+                disabled={isResearching}
+                aria-label="Search again"
+                title="Search again with same criteria"
+              >
+                <AutorenewIcon className={isResearching ? 'spin' : ''} fontSize="small" />
+              </button>
+            </div>
+          )}
         </header>
 
         {recommendations.length > 0 ? (
           <section className="results-section">
-            <p className="results-meta">Found {recommendations.length} shows</p>
+            <div className="pref-results-meta-row">
+            </div>
             <div className="results-grid" aria-live="polite">
               {recommendations.map((show) => (
                 <article
