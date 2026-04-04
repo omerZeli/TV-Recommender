@@ -4,6 +4,7 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { applyQualityFilter } from './quality-filter';
 
 @Injectable()
 export class TvService {
@@ -44,7 +45,9 @@ export class TvService {
       throw new BadGatewayException('TMDB search failed');
     }
 
-    return response.json();
+    const data = await response.json();
+    data.results = applyQualityFilter(data.results ?? []);
+    return data;
   }
 
   async getDetails(id: number) {

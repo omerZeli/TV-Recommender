@@ -5,6 +5,7 @@ import { DiscoverTvDto } from './dto/discover-tv.dto';
 import { NaturalLanguageSearchDto } from './dto/natural-language-search.dto';
 import { TvService } from './tv.service';
 import { NaturalLanguageOrchestrationService } from './natural-language-orchestration.service';
+import { applyQualityFilter } from './quality-filter';
 
 @Controller('tv')
 @UseGuards(JwtAuthGuard)
@@ -96,8 +97,11 @@ export class TvController {
 
     log(`=== DONE === Total validated results: ${finalShows.length}`);
 
+    // Filter out low-quality results
+    const qualityShows = applyQualityFilter(finalShows);
+
     // Trim the payload to save bandwidth on the frontend
-    const trimmedShows = finalShows.slice(0, targetCount).map((show: any) => ({
+    const trimmedShows = qualityShows.slice(0, targetCount).map((show: any) => ({
       id: show.id,
       name: show.name,
       overview: show.overview,
@@ -105,6 +109,7 @@ export class TvController {
       backdrop_path: show.backdrop_path,
       first_air_date: show.first_air_date,
       vote_average: show.vote_average,
+      vote_count: show.vote_count,
       genre_ids: show.genres?.map((g: any) => g.id) || [],
       origin_country: show.origin_country,
       original_language: show.original_language,
@@ -115,7 +120,7 @@ export class TvController {
       page: 1,
       results: trimmedShows,
       total_pages: 1,
-      total_results: finalShows.length,
+      total_results: qualityShows.length,
     };
   }
 
