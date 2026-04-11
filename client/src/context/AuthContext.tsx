@@ -12,6 +12,7 @@ interface AuthContextType {
   user: User | null
   token: string | null
   isLoading: boolean
+  isAuthReady: boolean
   error: string | null
   login: (email: string, password: string) => Promise<void>
   register: (name: string, email: string, password: string, country?: string) => Promise<void>
@@ -30,14 +31,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return localStorage.getItem('authToken')
   })
   const [isLoading, setIsLoading] = useState(false)
+  const [isAuthReady, setIsAuthReady] = useState(!token)
   const [error, setError] = useState<string | null>(null)
 
   // Verify token on mount
   useEffect(() => {
     if (token) {
-      verifyToken().catch((err) => {
-        console.error('Token verification failed:', err)
-      })
+      verifyToken()
+        .catch((err) => {
+          console.error('Token verification failed:', err)
+        })
+        .finally(() => {
+          setIsAuthReady(true)
+        })
     }
   }, [])
 
@@ -157,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, token, isLoading, error, login, register, logout, clearError, updateUser }}
+      value={{ user, token, isLoading, isAuthReady, error, login, register, logout, clearError, updateUser }}
     >
       {children}
     </AuthContext.Provider>

@@ -10,11 +10,15 @@ import { PreferencesResultsPage } from './pages/PreferencesResultsPage'
 import { ProfilePage } from './pages/ProfilePage'
 
 function AppRoutes() {
-  const { token } = useAuth()
+  const { token, user, isAuthReady } = useAuth()
+
+  if (!isAuthReady) {
+    return null
+  }
 
   return (
     <Routes>
-      {token ? (
+      {token && user ? (
         <>
           <Route path="/" element={<TvSearch />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
