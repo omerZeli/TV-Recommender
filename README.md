@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="client/public/tv-recommender-logo.png" width="80" alt="TV Recommender logo" />
+  <img src="client/public/favicon.svg" width="80" alt="TV Recommender logo" />
 </p>
 
 <h1 align="center">TV Recommender</h1>
